@@ -1,0 +1,45 @@
+# Smart Public Transport Advisor - Case Studies Input File
+#
+# Format for batch mode: origin,destination,preference
+# Lines starting with # are comments
+
+# ============================================================
+# Case Study 1: Budget Commuter
+# Scenario: A cost-conscious commuter traveling from Central to Sha Tin
+# Expected: Route with lowest total cost
+# ============================================================
+Central,Sha Tin,cheapest
+
+# ============================================================
+# Case Study 2: Last-Minute Student
+# Scenario: A student running late, traveling from Kowloon Tong to Causeway Bay
+# Expected: Route with shortest total time
+# ============================================================
+Kowloon Tong,Causeway Bay,fastest
+
+# ============================================================
+# Case Study 3: Transfer-Averse Traveler
+# Scenario: A traveler who prefers fewer transfers, going from Tuen Mun to Tsz Wan Shan
+# Expected: Route with minimum number of segments
+# ============================================================
+Tuen Mun,Tsz Wan Shan,fewest
+
+# ============================================================
+# Case Study 4: Morning Commuter
+# Scenario: A commuter in a rush from Prince Edward to Ocean Park
+# Expected: Quickest route possible
+# ============================================================
+Prince Edward,Ocean Park,fastest
+
+# ============================================================
+# Additional Test Cases
+# ============================================================
+
+# Test: Fastest from Tuen Mun to Airport
+Tuen Mun,Airport,fastest
+
+# Test: Cheapest from Causeway Bay to Sha Tin
+Causeway Bay,Sha Tin,cheapest
+
+# Test: Fewest segments from Kowloon to Lok Ma Chau
+Kowloon,Lok Ma Chau,fewest
