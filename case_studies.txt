@@ -19,10 +19,10 @@ Kowloon Tong,Causeway Bay,fastest
 
 # ============================================================
 # Case Study 3: Transfer-Averse Traveler
-# Scenario: A traveler who prefers fewer transfers, going from Tuen Mun to Tsz Wan Shan
+# Scenario: A traveler who prefers fewer transfers, going from Tuen Mun to Tsuen Wan
 # Expected: Route with minimum number of segments
 # ============================================================
-Tuen Mun,Tsz Wan Shan,fewest
+Tuen Mun,Tsuen Wan,fewest
 
 # ============================================================
 # Case Study 4: Morning Commuter
@@ -41,5 +41,5 @@ Tuen Mun,Airport,fastest
 # Test: Cheapest from Causeway Bay to Sha Tin
 Causeway Bay,Sha Tin,cheapest
 
-# Test: Fewest segments from Kowloon to Lok Ma Chau
-Kowloon,Lok Ma Chau,fewest
+# Test: Fewest segments from Kowloon to Fanling
+Kowloon,Fanling,fewest
