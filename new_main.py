@@ -1,0 +1,482 @@
+"""
+Public Transport Management System (Input, Processing, Verification)
+
+This module mirrors the terminal interaction style of main.py while focusing on:
+1. CSV input and strict validation
+2. Efficient Segment graph loading (no repeated stop objects)
+3. Querying and listing all possible routes (no sorting/ranking)
+"""
+
+from __future__ import annotations
+
+import csv
+import os
+import re
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Set, Tuple
+
+
+REQUIRED_HEADERS = [
+	"ID",
+	"START",
+	"STOP",
+	"MODE OF TRANSPORT",
+	"TIME",
+	"PRICE (HKD)",
+]
+
+
+@dataclass
+class TravelOption:
+	"""A single direct transport option from one stop to another."""
+
+	route_id: str
+	mode_of_transport: str
+	time_minutes: int
+	price_hkd: float
+	next_segment: "Segment"
+
+
+class Segment:
+	"""A stop node containing direct next travel options to other Segment nodes."""
+
+	def __init__(self, stop_name: str):
+		self.stop_name = stop_name
+		self.next_options: List[TravelOption] = []
+
+	def add_option(self, option: TravelOption) -> None:
+		self.next_options.append(option)
+
+	def __repr__(self) -> str:
+		return f"Segment({self.stop_name}, {len(self.next_options)} options)"
+
+
+@dataclass
+class Route:
+	"""One full route from origin to destination."""
+
+	legs: List[Tuple[Segment, TravelOption]]
+
+	@property
+	def total_time(self) -> int:
+		return sum(option.time_minutes for _, option in self.legs)
+
+	@property
+	def total_price(self) -> float:
+		return sum(option.price_hkd for _, option in self.legs)
+
+
+class TransportGraph:
+	"""Graph container that keeps one Segment object per stop name."""
+
+	def __init__(self):
+		self._segments_by_stop: Dict[str, Segment] = {}
+		self.route_count = 0
+
+	def get_or_create_segment(self, stop_name: str) -> Segment:
+		segment = self._segments_by_stop.get(stop_name)
+		if segment is None:
+			segment = Segment(stop_name)
+			self._segments_by_stop[stop_name] = segment
+		return segment
+
+	def add_connection(
+		self,
+		route_id: str,
+		start: str,
+		stop: str,
+		mode_of_transport: str,
+		time_minutes: int,
+		price_hkd: float,
+	) -> None:
+		from_segment = self.get_or_create_segment(start)
+		to_segment = self.get_or_create_segment(stop)
+
+		option = TravelOption(
+			route_id=route_id,
+			mode_of_transport=mode_of_transport,
+			time_minutes=time_minutes,
+			price_hkd=price_hkd,
+			next_segment=to_segment,
+		)
+		from_segment.add_option(option)
+		self.route_count += 1
+
+	def get_stops(self) -> List[str]:
+		return sorted(self._segments_by_stop.keys())
+
+	def get_segment(self, stop_name: str) -> Optional[Segment]:
+		return self._segments_by_stop.get(stop_name)
+
+	def has_stops(self) -> bool:
+		return bool(self._segments_by_stop)
+
+	def num_segments(self) -> int:
+		return len(self._segments_by_stop)
+
+	def average_stats(self) -> Tuple[float, float]:
+		all_options: List[TravelOption] = []
+		for segment in self._segments_by_stop.values():
+			all_options.extend(segment.next_options)
+
+		if not all_options:
+			return 0.0, 0.0
+
+		avg_time = sum(option.time_minutes for option in all_options) / len(all_options)
+		avg_price = sum(option.price_hkd for option in all_options) / len(all_options)
+		return avg_time, avg_price
+
+
+def parse_time_to_minutes(raw_time: str, row_number: int) -> int:
+	"""Extract integer minutes from values like '10 mins' or '45 min'."""
+	value = raw_time.strip()
+	if not value:
+		raise ValueError(f"Row {row_number}: TIME is empty.")
+
+	match = re.search(r"(\d+)", value)
+	if not match:
+		raise ValueError(
+			f"Row {row_number}: TIME '{raw_time}' is invalid. Expected a minute value such as '10 mins'."
+		)
+
+	minutes = int(match.group(1))
+	if minutes <= 0:
+		raise ValueError(f"Row {row_number}: TIME must be positive.")
+	return minutes
+
+
+def validate_headers(found_headers: List[str]) -> None:
+	normalized = [header.strip() for header in found_headers]
+	if normalized != REQUIRED_HEADERS:
+		raise ValueError(
+			"Header mismatch. Expected exactly: "
+			+ ",".join(REQUIRED_HEADERS)
+			+ f" | Found: {','.join(normalized)}"
+		)
+
+
+def load_map_csv(filename: str) -> Tuple[Optional[TransportGraph], List[str]]:
+	"""Load and validate map CSV. Returns graph and list of messages."""
+	messages: List[str] = []
+
+	if not os.path.exists(filename):
+		return None, [f"Error: File '{filename}' not found."]
+	if os.path.getsize(filename) == 0:
+		return None, [f"Error: File '{filename}' is empty."]
+
+	graph = TransportGraph()
+
+	try:
+		with open(filename, "r", encoding="utf-8-sig", newline="") as csv_file:
+			reader = csv.DictReader(csv_file)
+			if reader.fieldnames is None:
+				return None, ["Error: Missing CSV header row."]
+
+			validate_headers(reader.fieldnames)
+
+			for row_number, row in enumerate(reader, start=2):
+				route_id = (row.get("ID") or "").strip()
+				start = (row.get("START") or "").strip()
+				stop = (row.get("STOP") or "").strip()
+				mode = (row.get("MODE OF TRANSPORT") or "").strip()
+				raw_time = (row.get("TIME") or "").strip()
+				raw_price = (row.get("PRICE (HKD)") or "").strip()
+
+				if not route_id:
+					raise ValueError(f"Row {row_number}: ID is empty.")
+				if not start:
+					raise ValueError(f"Row {row_number}: START is empty.")
+				if not stop:
+					raise ValueError(f"Row {row_number}: STOP is empty.")
+				if not mode:
+					raise ValueError(f"Row {row_number}: MODE OF TRANSPORT is empty.")
+
+				time_minutes = parse_time_to_minutes(raw_time, row_number)
+
+				if not raw_price:
+					raise ValueError(f"Row {row_number}: PRICE (HKD) is empty.")
+				try:
+					price_hkd = float(raw_price)
+				except ValueError as exc:
+					raise ValueError(
+						f"Row {row_number}: PRICE (HKD) '{raw_price}' is invalid. Expected a number."
+					) from exc
+
+				if price_hkd < 0:
+					raise ValueError(f"Row {row_number}: PRICE (HKD) cannot be negative.")
+
+				graph.add_connection(
+					route_id=route_id,
+					start=start,
+					stop=stop,
+					mode_of_transport=mode,
+					time_minutes=time_minutes,
+					price_hkd=price_hkd,
+				)
+
+	except ValueError as exc:
+		return None, [f"Error: {exc}"]
+	except Exception as exc:
+		return None, [f"Error: Could not read file '{filename}': {exc}"]
+
+	if graph.route_count == 0:
+		return None, ["Error: No route rows found in CSV."]
+
+	messages.append(
+		f"Loaded {graph.num_segments()} stops and {graph.route_count} route options from '{filename}'."
+	)
+	return graph, messages
+
+
+def display_menu() -> None:
+	"""Displays the main menu in the same style as main.py."""
+	print("\n" + "=" * 50)
+	print("  Smart Public Transport Advisor")
+	print("=" * 50)
+	print("  1. List all stops")
+	print("  2. Query journeys")
+	print("  3. Show network summary")
+	print("  4. Load different network file")
+	print("  5. Exit")
+	print("=" * 50)
+
+
+def list_stops(graph: TransportGraph) -> None:
+	"""Displays stops in the network with search/filter options."""
+	stops = graph.get_stops()
+	if not stops:
+		print("\nNo stops in the network.")
+		return
+
+	print(f"\nTotal stops: {len(stops)}")
+	query = input("Enter stop name to search (or 'all' to list all, 'summary' for stats): ").strip()
+
+	if query.lower() == "summary":
+		show_summary(graph)
+		return
+
+	if query.lower() == "all":
+		print("\nAll stops:")
+		print("-" * 30)
+		for i, stop in enumerate(stops, 1):
+			print(f"  {i}. {stop}")
+		return
+
+	filtered = [stop for stop in stops if query.lower() in stop.lower()]
+	if not filtered:
+		print(f"\nNo stops found containing '{query}'.")
+		return
+
+	print(f"\nStops containing '{query}' ({len(filtered)} found):")
+	print("-" * 30)
+	for i, stop in enumerate(filtered, 1):
+		print(f"  {i}. {stop}")
+
+
+def show_summary(graph: TransportGraph) -> None:
+	"""Displays network summary statistics."""
+	num_stops = graph.num_segments()
+	num_routes = graph.route_count
+	avg_time, avg_price = graph.average_stats()
+
+	print("\n" + "-" * 40)
+	print("         Network Summary")
+	print("-" * 40)
+	print(f"  Number of stops:    {num_stops}")
+	print(f"  Number of segments: {num_routes}")
+	if num_routes > 0:
+		print(f"  Avg segment duration: {avg_time:.1f} minutes")
+		print(f"  Avg segment cost:     ${avg_price:.2f}")
+	print("-" * 40)
+
+
+def normalize_stop_query(value: str) -> str:
+	"""Normalize user stop input for case-insensitive exact-name matching."""
+	# Keep punctuation/words so "Central" and "Central (Pier 5)" remain different.
+	return " ".join(value.strip().split()).casefold()
+
+
+def validate_stops(graph: TransportGraph, origin: str, destination: str) -> Tuple[bool, str, str, str]:
+	"""Validates origin and destination stops (case insensitive)."""
+	stops = graph.get_stops()
+	stops_lookup = {normalize_stop_query(stop): stop for stop in stops}
+
+	origin_norm = stops_lookup.get(normalize_stop_query(origin))
+	if not origin_norm:
+		return False, f"Error: Unknown stop '{origin}'", "", ""
+
+	destination_norm = stops_lookup.get(normalize_stop_query(destination))
+	if not destination_norm:
+		return False, f"Error: Unknown stop '{destination}'", "", ""
+
+	if origin_norm == destination_norm:
+		return False, "Error: Origin and destination cannot be the same", "", ""
+
+	return True, "", origin_norm, destination_norm
+
+
+def generate_all_routes(
+	graph: TransportGraph,
+	origin: str,
+	destination: str,
+	max_depth: int = 6,
+) -> List[Route]:
+	"""Generate all possible routes using depth-limited DFS, no sorting."""
+	routes: List[Route] = []
+
+	start_segment = graph.get_segment(origin)
+	end_segment = graph.get_segment(destination)
+
+	if start_segment is None or end_segment is None:
+		return routes
+
+	def dfs(current: Segment, visited: Set[str], path: List[Tuple[Segment, TravelOption]]) -> None:
+		if len(path) > max_depth:
+			return
+
+		if current.stop_name == destination and path:
+			routes.append(Route(legs=list(path)))
+			return
+
+		for option in current.next_options:
+			next_stop_name = option.next_segment.stop_name
+			if next_stop_name in visited:
+				continue
+
+			path.append((current, option))
+			visited.add(next_stop_name)
+			dfs(option.next_segment, visited, path)
+			visited.remove(next_stop_name)
+			path.pop()
+
+	dfs(start_segment, {origin}, [])
+	return routes
+
+
+def display_routes(routes: List[Route], origin: str, destination: str) -> None:
+	"""Display all generated routes in discovered order (unsorted)."""
+	if not routes:
+		print(f"\nNo journeys found from {origin} to {destination}.")
+		return
+
+	print(f"\n{'=' * 60}")
+	print(f"  Journeys from '{origin}' to '{destination}'")
+	print("  Listing all possible routes (no ranking/sorting)")
+	print(f"  Found {len(routes)} route(s)")
+	print(f"{'=' * 60}")
+
+	for i, route in enumerate(routes, 1):
+		print(f"\n--- Route {i} ---")
+		print(f"  Duration: {route.total_time} minutes")
+		print(f"  Cost:     ${route.total_price:.2f} HKD")
+		print(f"  Segments: {len(route.legs)}")
+		print("  Route:")
+
+		for leg_index, (segment, option) in enumerate(route.legs, 1):
+			print(
+				f"    {leg_index}. {segment.stop_name} -> {option.next_segment.stop_name} "
+				f"[{option.mode_of_transport}] ({option.time_minutes}min, ${option.price_hkd:.2f}, ID={option.route_id})"
+			)
+
+
+def query_journeys(graph: TransportGraph) -> None:
+	"""Handles the journey query workflow."""
+	if not graph.has_stops():
+		print("\nError: No network loaded. Please load a network first.")
+		return
+
+	print("\nTip: Use option 1 to search/list stops if needed.")
+	stops_lookup = {normalize_stop_query(stop): stop for stop in graph.get_stops()}
+
+	while True:
+		origin_input = input("\nEnter origin stop: ").strip()
+		if not origin_input:
+			print("Please enter a stop name.")
+			continue
+
+		origin = stops_lookup.get(normalize_stop_query(origin_input))
+		if origin is None:
+			print(f"Error: Unknown stop '{origin_input}'")
+			continue
+		break
+
+	while True:
+		destination = input("Enter destination stop: ").strip()
+		if destination:
+			break
+		print("Please enter a stop name.")
+
+	is_valid, error_msg, origin, destination = validate_stops(graph, origin, destination)
+	if not is_valid:
+		print(f"\n{error_msg}")
+		return
+
+	routes = generate_all_routes(graph, origin, destination)
+	display_routes(routes, origin, destination)
+
+
+def load_network_interactive() -> Tuple[Optional[TransportGraph], List[str]]:
+	"""Prompt user for a CSV file and keep asking until valid or cancelled."""
+	filename = input("\nEnter network file path: ").strip()
+
+	if not filename:
+		print("Error: No filename provided.")
+		return None, ["Error: No filename provided."]
+
+	while True:
+		graph, messages = load_map_csv(filename)
+		if graph is not None:
+			return graph, messages
+
+		for message in messages:
+			print(message)
+
+		print("Please fix the above error in the CSV file.")
+		retry = input("Press Enter to retry loading the same file, or type 'cancel' to stop: ").strip().lower()
+		if retry == "cancel":
+			return None, ["Load cancelled by user."]
+
+
+def main() -> None:
+	"""Main function - defaults to data/map1.csv and starts terminal menu."""
+	default_map = os.path.join("data", "map1.csv")
+
+	print("Loading default network from 'data/map1.csv'...")
+	graph, messages = load_map_csv(default_map)
+
+	if messages:
+		for message in messages:
+			print(message)
+
+	if graph is None:
+		print("\nWarning: Default map failed to load.")
+		print("Use option 4 to load a different network file.")
+		graph = TransportGraph()
+
+	while True:
+		display_menu()
+		choice = input("\nEnter choice (1-5): ").strip()
+
+		if choice == "1":
+			list_stops(graph)
+		elif choice == "2":
+			query_journeys(graph)
+		elif choice == "3":
+			show_summary(graph)
+		elif choice == "4":
+			new_graph, new_messages = load_network_interactive()
+			for message in new_messages:
+				print(message)
+			if new_graph is not None and new_graph.has_stops():
+				graph = new_graph
+				print("\nNetwork loaded successfully!")
+		elif choice == "5":
+			print("\nThank you for using Smart Public Transport Advisor!")
+			print("Goodbye!")
+			break
+		else:
+			print("\nInvalid choice. Please enter a number 1-5.")
+
+
+if __name__ == "__main__":
+	main()

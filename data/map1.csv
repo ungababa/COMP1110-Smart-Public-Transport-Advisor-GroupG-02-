@@ -1,0 +1,36 @@
+ID,START,STOP,MODE OF TRANSPORT,TIME,PRICE (HKD)
+1,Central,Admiralty,MTR (Island Line),4 mins,4.00
+2,Central,Admiralty,Tram,12 mins,3.00
+3,Central,Admiralty,Bus (5B),10 mins,4.50
+4,Admiralty,Wan Chai,MTR (Island Line),3 mins,4.00
+5,Admiralty,Wan Chai,Tram,8 mins,3.00
+6,Admiralty,Wan Chai,Bus (26),12 mins,5.20
+7,Wan Chai,Causeway Bay,MTR (Island Line),3 mins,4.00
+8,Wan Chai,Causeway Bay,Tram,10 mins,3.00
+9,Wan Chai,Causeway Bay,Bus (11),12 mins,5.20
+10,Causeway Bay,North Point,MTR (Island Line),5 mins,5.00
+11,North Point,Quarry Bay,MTR (Island Line),4 mins,4.50
+12,Quarry Bay,Taikoo,MTR (Island Line),3 mins,4.00
+13,Taikoo,Shau Kei Wan,MTR (Island Line),5 mins,5.00
+14,Shau Kei Wan,Chai Wan,MTR (Island Line),4 mins,4.50
+15,Kennedy Town,Sheung Wan,Tram,18 mins,3.00
+16,Sheung Wan,Central,MTR (Island Line),3 mins,4.00
+17,Central,Tsim Sha Tsui,Star Ferry,10 mins,4.20
+18,Central,Tsim Sha Tsui,Bus (103 Cross-Harbour),30 mins,10.10
+19,Central,Tsim Sha Tsui,MTR (Island + Tsuen Wan Line),14 mins,9.80
+20,Tsim Sha Tsui,Jordan,MTR (Tsuen Wan Line),3 mins,4.50
+21,Jordan,Yau Ma Tei,MTR (Tsuen Wan Line),2 mins,4.00
+22,Yau Ma Tei,Mong Kok,MTR (Kwun Tong Line),3 mins,4.00
+23,Mong Kok,Prince Edward,MTR (Kwun Tong Line),2 mins,4.00
+24,Prince Edward,Sham Shui Po,MTR (Kwun Tong Line),3 mins,4.50
+25,Sham Shui Po,Cheung Sha Wan,Bus (2E),10 mins,5.70
+26,Mong Kok,Causeway Bay,Bus (5C Cross-Harbour),40 mins,10.10
+27,Mong Kok,Causeway Bay,MTR (Kwun Tong + Island Line),18 mins,11.50
+28,Kwun Tong,Tseung Kwan O,MTR (Tseung Kwan O Line),8 mins,7.00
+29,Tseung Kwan O,Po Lam,MTR (Tseung Kwan O Line),5 mins,5.50
+30,Po Lam,LOHAS Park,MTR (Tseung Kwan O Line),6 mins,6.00
+31,Diamond Hill,Sha Tin,Bus (81C),25 mins,7.80
+32,Sha Tin,Fo Tan,MTR (East Rail Line),4 mins,5.00
+33,North Point,Kwun Tong,Ferry,20 mins,9.10
+34,North Point,Kwun Tong,Bus (65K),45 mins,10.60
+35,Causeway Bay,Hung Hom,Bus (107X Cross-Harbour),30 mins,10.60

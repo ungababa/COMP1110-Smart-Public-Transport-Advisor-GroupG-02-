@@ -1,0 +1,36 @@
+ID,START,STOP,MODE OF TRANSPORT,TIME,PRICE (HKD)
+1,Wu Kai Sha,Ma On Shan,MTR (Tuen Ma Line),6 mins,5.50
+2,Ma On Shan,Che Kung Temple,MTR (Tuen Ma Line),11 mins,7.50
+3,Che Kung Temple,Tai Wai,MTR (Tuen Ma Line),3 mins,4.50
+4,Tai Wai,Diamond Hill,MTR (Tuen Ma Line),9 mins,7.00
+5,Diamond Hill,Kai Tak,MTR (Tuen Ma Line),4 mins,5.00
+6,Kai Tak,To Kwa Wan,MTR (Tuen Ma Line),3 mins,4.50
+7,To Kwa Wan,Ho Man Tin,MTR (Tuen Ma Line),3 mins,4.50
+8,Ho Man Tin,Hung Hom,MTR (Tuen Ma Line),3 mins,4.50
+9,Ho Man Tin,Hung Hom,Bus (104),10 mins,5.70
+10,Ho Man Tin,Mong Kok,Minibus (27M),15 mins,7.50
+11,Hung Hom,East Tsim Sha Tsui,MTR (Tuen Ma Line),4 mins,4.50
+12,East Tsim Sha Tsui,Austin,MTR (Tuen Ma Line),3 mins,4.50
+13,Austin,Nam Cheong,MTR (Tuen Ma Line),5 mins,5.00
+14,Nam Cheong,Tsuen Wan West,MTR (Tuen Ma Line),12 mins,8.00
+15,Tsuen Wan West,Kam Sheung Road,MTR (Tuen Ma Line),14 mins,9.00
+16,Kam Sheung Road,Yuen Long,MTR (Tuen Ma Line),7 mins,6.50
+17,Yuen Long,Tuen Mun,Bus (68A),30 mins,8.90
+18,Yuen Long,Tuen Mun,Light Rail (751),38 mins,5.80
+19,Tuen Mun,Jordan,Bus (60M),60 mins,16.50
+20,Tuen Mun,Nam Cheong,MTR (Tuen Ma Line),26 mins,15.00
+21,Tuen Mun,Sam Shing,Light Rail (507),10 mins,5.80
+22,Sam Shing,Lam Tei,Light Rail (507),8 mins,5.80
+23,Yuen Long,Tin Shui Wai,Light Rail (706),15 mins,5.80
+24,Tin Shui Wai,Siu Hong,Light Rail (705),18 mins,5.80
+25,Central,The Peak,Peak Tram,25 mins,55.00
+26,Admiralty,The Peak,Bus (15B),40 mins,9.50
+27,Wan Chai,The Peak,Minibus (1),40 mins,11.00
+28,The Peak,Aberdeen,Bus (77),30 mins,7.10
+29,Aberdeen,Stanley,Bus (73),35 mins,9.80
+30,Stanley,Shau Kei Wan,Bus (14),40 mins,9.80
+31,Ngong Ping,Tung Chung,Ngong Ping 360 Cable Car,25 mins,175.00
+32,Tung Chung,Mong Kok,Bus (E33),55 mins,22.00
+33,Tung Chung,Kowloon Station,MTR (Tung Chung + Tuen Ma Line),25 mins,17.00
+34,Kowloon City,Kai Tak,Bus (11),12 mins,5.70
+35,Tsim Sha Tsui,Admiralty,Bus (973 Cross-Harbour),30 mins,10.60
