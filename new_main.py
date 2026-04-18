@@ -14,6 +14,7 @@ import os
 import re
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Set, Tuple
+from journey_planner import rank_routes, filter_by_mode, retry_mode_filter
 
 
 REQUIRED_HEADERS = [
@@ -353,32 +354,38 @@ def generate_all_routes(
 	return routes
 
 
-def display_routes(routes: List[Route], origin: str, destination: str) -> None:
-	"""Display all generated routes in discovered order (unsorted)."""
+def display_routes(routes: List[Route], origin: str, destination: str,
+				   preference: str, allowed_modes: Optional[Set[str]]) -> None:
 	if not routes:
 		print(f"\nNo journeys found from {origin} to {destination}.")
 		return
 
+	preference_labels = {"fastest": "Fastest", "cheapest": "Cheapest", "fewest": "Fewest stops"}
+	pref_label = preference_labels.get(preference, preference.capitalize())
+
 	print(f"\n{'=' * 60}")
 	print(f"  Journeys from '{origin}' to '{destination}'")
-	print("  Listing all possible routes (no ranking/sorting)")
-	print(f"  Found {len(routes)} route(s)")
+	print(f"  Ranked by: {pref_label}")
+	if allowed_modes:
+		print(f"  Mode filter: {', '.join(sorted(allowed_modes))} only")
+	print(f"  Showing top {len(routes)} result(s)")
 	print(f"{'=' * 60}")
 
 	for i, route in enumerate(routes, 1):
-		print(f"\n--- Route {i} ---")
-		print(f"  Duration: {route.total_time} minutes")
-		print(f"  Cost:     ${route.total_price:.2f} HKD")
-		print(f"  Segments: {len(route.legs)}")
-		print("  Route:")
-
+		print(f"\n  Route {i}")
+		print(f"  {'─' * 40}")
+		print(f"  Time:   {route.total_time} mins")
+		print(f"  Cost:   ${route.total_price:.2f} HKD")
+		print(f"  Stops:  {len(route.legs)}")
+		print(f"  Path:")
 		for leg_index, (segment, option) in enumerate(route.legs, 1):
-			print(
-				f"    {leg_index}. {segment.stop_name} -> {option.next_segment.stop_name} "
-				f"[{option.mode_of_transport}] ({option.time_minutes}min, ${option.price_hkd:.2f}, ID={option.route_id})"
-			)
+			print(f"    {leg_index}. {segment.stop_name} → {option.next_segment.stop_name}")
+			print(f"       {option.mode_of_transport}  |  {option.time_minutes} mins  |  ${option.price_hkd:.2f}")
+
+	print(f"\n{'=' * 60}")
 
 
+# updated query flow — now collects preference + mode filter before showing results
 def query_journeys(graph: TransportGraph) -> None:
 	"""Handles the journey query workflow."""
 	if not graph.has_stops():
@@ -401,18 +408,82 @@ def query_journeys(graph: TransportGraph) -> None:
 		break
 
 	while True:
-		destination = input("Enter destination stop: ").strip()
-		if destination:
-			break
-		print("Please enter a stop name.")
+		destination_input = input("Enter destination stop: ").strip()
+		if not destination_input:
+			print("Please enter a stop name.")
+			continue
+		destination = stops_lookup.get(normalize_stop_query(destination_input))
+		if destination is None:
+			print(f"Error: Unknown stop '{destination_input}'")
+			continue
+		break
 
 	is_valid, error_msg, origin, destination = validate_stops(graph, origin, destination)
 	if not is_valid:
 		print(f"\n{error_msg}")
 		return
 
-	routes = generate_all_routes(graph, origin, destination)
-	display_routes(routes, origin, destination)
+	preference = ask_preference()
+
+	print("\n  Searching for routes...")
+	all_routes = generate_all_routes(graph, origin, destination)
+
+	if not all_routes:
+		print(f"\n  No journeys found from '{origin}' to '{destination}'.")
+		return
+
+	print(f"  Found {len(all_routes)} possible route(s).")
+
+	filtered_routes, allowed_modes = retry_mode_filter(all_routes, graph)
+	ranked = rank_routes(filtered_routes, preference)
+	display_routes(ranked, origin, destination, preference, allowed_modes)
+
+
+# asks the user how they want results sorted before we run anything
+def ask_preference() -> str:
+	print("\n  How would you like to rank journeys?")
+	print("    1. Fastest   (shortest total time)")
+	print("    2. Cheapest  (lowest total price)")
+	print("    3. Fewest    (least number of stops)")
+	valid_choices = {
+		"1": "fastest", "2": "cheapest", "3": "fewest",
+		"fastest": "fastest", "cheapest": "cheapest", "fewest": "fewest",
+	}
+	while True:
+		raw = input("\n  Your choice (1/2/3): ").strip().lower()
+		preference = valid_choices.get(raw)
+		if preference:
+			return preference
+		print("  Please enter 1, 2, or 3.")
+
+# lets the user narrow down results to specific transport modes, or skip entirely
+def ask_mode_filter(graph: TransportGraph) -> Optional[Set[str]]:
+	all_modes = graph.get_all_modes()
+	print("\n  Filter by transport mode? (optional)")
+	print("  Press Enter to skip and show all modes.")
+	print()
+	for i, mode in enumerate(all_modes, 1):
+		print(f"    {i}. {mode}")
+	raw = input("\n  Enter number(s) separated by commas, or press Enter to skip: ").strip()
+	if not raw:
+		return None
+	selected_modes: Set[str] = set()
+	for part in raw.split(","):
+		part = part.strip()
+		if not part:
+			continue
+		if part.isdigit():
+			index = int(part) - 1
+			if 0 <= index < len(all_modes):
+				selected_modes.add(all_modes[index])
+			else:
+				print(f"  Warning: '{part}' is out of range, skipping.")
+		else:
+			print(f"  Warning: '{part}' is not a valid number, skipping.")
+	if not selected_modes:
+		print("  No valid selections — showing all modes.")
+		return None
+	return selected_modes
 
 
 def load_network_interactive() -> Tuple[Optional[TransportGraph], List[str]]:
