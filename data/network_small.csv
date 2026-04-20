@@ -1,0 +1,6 @@
+StationA,StationB,3,4.50
+StationB,StationC,4,5.00
+StationC,StationD,3,4.50
+StationA,StationC,10,6.00
+StationB,StationD,15,7.50
+StationA,StationD,20,10.00

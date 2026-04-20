@@ -1,0 +1,7 @@
+ID,START,STOP,MODE OF TRANSPORT,TIME,PRICE (HKD)
+1,StationA,StationB,MTR,3,4.50
+2,StationB,StationC,MTR,4,5.00
+3,StationC,StationD,MTR,3,4.50
+4,StationA,StationC,Bus (1),10,6.00
+5,StationB,StationD,Bus (2),15,7.50
+6,StationA,StationD,Express Bus,20,10.00

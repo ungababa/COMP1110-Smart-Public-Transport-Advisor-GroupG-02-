@@ -313,19 +313,19 @@ def load_network(filename: str) -> Tuple[TransportNetwork, Dict[Tuple[str, str],
     warnings = []
 
     if not os.path.exists(filename):
-        return network, [f"Error: File '{filename}' not found."]
+        return network, {}, [f"Error: File '{filename}' not found."]
 
     if os.path.getsize(filename) == 0:
-        return network, [f"Error: File '{filename}' is empty."]
+        return network, {}, [f"Error: File '{filename}' is empty."]
 
     try:
         with open(filename, 'r', encoding='utf-8') as f:
             lines = f.readlines()
     except Exception as e:
-        return network, [f"Error: Could not read file: {str(e)}"]
+        return network, {}, [f"Error: Could not read file: {str(e)}"]
 
     if not lines:
-        return network, [f"Error: File '{filename}' is empty."]
+        return network, {}, [f"Error: File '{filename}' is empty."]
 
     # Skip header if present
     start_idx = 0

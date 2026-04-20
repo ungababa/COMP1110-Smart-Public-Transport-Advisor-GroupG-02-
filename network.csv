@@ -1,0 +1,35 @@
+Central,Admiralty,4,4.00
+Central,Admiralty,12,3.00
+Central,Admiralty,10,4.50
+Admiralty,Wan Chai,3,4.00
+Admiralty,Wan Chai,8,3.00
+Admiralty,Wan Chai,12,5.20
+Wan Chai,Causeway Bay,3,4.00
+Wan Chai,Causeway Bay,10,3.00
+Wan Chai,Causeway Bay,12,5.20
+Causeway Bay,North Point,5,5.00
+North Point,Quarry Bay,4,4.50
+Quarry Bay,Taikoo,3,4.00
+Taikoo,Shau Kei Wan,5,5.00
+Shau Kei Wan,Chai Wan,4,4.50
+Kennedy Town,Sheung Wan,18,3.00
+Sheung Wan,Central,3,4.00
+Central,Tsim Sha Tsui,10,4.20
+Central,Tsim Sha Tsui,30,10.10
+Central,Tsim Sha Tsui,14,9.80
+Tsim Sha Tsui,Jordan,3,4.50
+Jordan,Yau Ma Tei,2,4.00
+Yau Ma Tei,Mong Kok,3,4.00
+Mong Kok,Prince Edward,2,4.00
+Prince Edward,Sham Shui Po,3,4.50
+Sham Shui Po,Cheung Sha Wan,10,5.70
+Mong Kok,Causeway Bay,40,10.10
+Mong Kok,Causeway Bay,18,11.50
+Kwun Tong,Tseung Kwan O,8,7.00
+Tseung Kwan O,Po Lam,5,5.50
+Po Lam,LOHAS Park,6,6.00
+Diamond Hill,Sha Tin,25,7.80
+Sha Tin,Fo Tan,4,5.00
+North Point,Kwun Tong,20,9.10
+North Point,Kwun Tong,45,10.60
+Causeway Bay,Hung Hom,30,10.60
