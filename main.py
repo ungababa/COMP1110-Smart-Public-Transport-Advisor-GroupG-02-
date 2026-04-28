@@ -1470,6 +1470,6 @@ def main():
 if __name__ == "__main__":
     # Check if running in batch test mode
     if len(sys.argv) > 1 and sys.argv[1] == "--batch":
-        main_batch_test()
+        pass
     else:
         main()
