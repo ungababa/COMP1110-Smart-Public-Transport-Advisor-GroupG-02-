@@ -40,14 +40,15 @@ class Segment:
         cost: Fare in HKD
     """
 
-    def __init__(self, from_stop: str, to_stop: str, duration: int, cost: float):
+    def __init__(self, from_stop: str, to_stop: str, duration: int, cost: float, mode: str = 'Other'):
         self.from_stop = from_stop
         self.to_stop = to_stop
         self.duration = duration
         self.cost = cost
+        self.mode_of_transport = mode
 
     def __repr__(self):
-        return f"Segment({self.from_stop} -> {self.to_stop}, {self.duration}min, ${self.cost:.2f})"
+        return f"Segment({self.from_stop} -> {self.to_stop}, {self.duration}min, ${self.cost:.2f}, {self.mode_of_transport})"
 
 
 class Journey:
@@ -271,14 +272,14 @@ def load_network_from_mtr() -> Tuple[TransportNetwork, Dict[Tuple[str, str], flo
                 duration = TYPICAL_DURATION
 
             # Add forward segment
-            segment = Segment(from_station, to_station, duration, fare)
+            segment = Segment(from_station, to_station, duration, fare, mode='MTR')
             network.add_segment(segment)
             segments_added += 1
 
             # Add reverse segment (bidirectional)
             reverse_fare = fare_lookup.get((to_station, from_station), fare)
             reverse_duration = ael_durations.get((to_station, from_station), ael_durations.get((from_station, to_station), duration))
-            reverse_segment = Segment(to_station, from_station, reverse_duration, reverse_fare)
+            reverse_segment = Segment(to_station, from_station, reverse_duration, reverse_fare, mode='MTR')
             network.add_segment(reverse_segment)
             segments_added += 1
 
@@ -375,7 +376,7 @@ def load_network(filename: str) -> Tuple[TransportNetwork, Dict[Tuple[str, str],
             continue
 
         # Add segment to network
-        segment = Segment(from_stop, to_stop, duration, cost)
+        segment = Segment(from_stop, to_stop, duration, cost, mode='Other')
         network.add_segment(segment)
         valid_count += 1
 
@@ -471,13 +472,13 @@ def load_network_from_light_rail() -> Tuple[TransportNetwork, Dict[Tuple[str, st
             fare = fare_lookup.get((from_station, to_station), 5.0)
 
             # Add forward
-            segment = Segment(from_station, to_station, TYPICAL_DURATION, fare)
+            segment = Segment(from_station, to_station, TYPICAL_DURATION, fare, mode='Light Rail')
             network.add_segment(segment)
             segments_added += 1
 
             # Add reverse
             reverse_fare = fare_lookup.get((to_station, from_station), fare)
-            reverse_segment = Segment(to_station, from_station, TYPICAL_DURATION, reverse_fare)
+            reverse_segment = Segment(to_station, from_station, TYPICAL_DURATION, reverse_fare, mode='Light Rail')
             network.add_segment(reverse_segment)
             segments_added += 1
 
@@ -572,12 +573,12 @@ def load_network_from_bus() -> Tuple[TransportNetwork, Dict[Tuple[str, str], flo
             to_station = stops_sorted[i + 1][1]
 
             # For bus, use fixed fare per segment (simplified)
-            segment = Segment(from_station, to_station, TYPICAL_DURATION, fare)
+            segment = Segment(from_station, to_station, TYPICAL_DURATION, fare, mode='Bus')
             network.add_segment(segment)
             segments_added += 1
 
             # Add reverse (bidirectional)
-            reverse_segment = Segment(to_station, from_station, TYPICAL_DURATION, fare)
+            reverse_segment = Segment(to_station, from_station, TYPICAL_DURATION, fare, mode='Bus')
             network.add_segment(reverse_segment)
             segments_added += 1
 
@@ -589,8 +590,8 @@ def load_network_from_bus() -> Tuple[TransportNetwork, Dict[Tuple[str, str], flo
             if dist < 500:  # within 500 units (assume meters)
                 duration = max(1, int(dist / 84))  # minutes, walking at 1.4 m/s = 84 m/min, at least 1 min
                 # Add bidirectional walking
-                network.add_segment(Segment(stop1, stop2, duration, 0.0))
-                network.add_segment(Segment(stop2, stop1, duration, 0.0))
+                network.add_segment(Segment(stop1, stop2, duration, 0.0, mode='Walk'))
+                network.add_segment(Segment(stop2, stop1, duration, 0.0, mode='Walk'))
                 walking_segments += 2
 
     # Add walking transfers between MTR/light rail stations and bus stops with similar names
@@ -606,8 +607,8 @@ def load_network_from_bus() -> Tuple[TransportNetwork, Dict[Tuple[str, str], flo
             # Check if bus stop contains MTR stop name
             if mtr_stop.lower() in bus_stop.lower():
                 # Add transfer walking, 5 min, 0 cost
-                network.add_segment(Segment(mtr_stop, bus_stop, 5, 0.0))
-                network.add_segment(Segment(bus_stop, mtr_stop, 5, 0.0))
+                network.add_segment(Segment(mtr_stop, bus_stop, 5, 0.0, mode='Walk'))
+                network.add_segment(Segment(bus_stop, mtr_stop, 5, 0.0, mode='Walk'))
                 transfer_segments += 2
 
     warnings.append(f"Loaded bus: {len([s for s in network.all_stops if s in stop_coords])} bus stops, {segments_added} bus segments, {walking_segments} walking segments, {transfer_segments} transfer segments")
@@ -677,7 +678,7 @@ def load_network_from_airport_express() -> Tuple[TransportNetwork, List[str]]:
             if from_station != to_station:
                 fare = fare_lookup.get((from_station, to_station), 100.0)  # Default high fare
                 duration = duration_lookup.get((from_station, to_station), duration_lookup.get((to_station, from_station), 10))
-                segment = Segment(from_station, to_station, duration, fare)
+                segment = Segment(from_station, to_station, duration, fare, mode='Airport Express')
                 network.add_segment(segment)
                 segments_added += 1
 
@@ -829,6 +830,104 @@ def rank_journeys(journeys: List[Journey], preference: str) -> List[Journey]:
         return journeys
 
 
+def get_transport_preferences(network: TransportNetwork) -> Optional[set]:
+    """Prompt user to select transport medium(s).
+
+    Returns a set of selected mode strings, or None for Any/skip.
+    """
+    # Collect available modes from the network
+    modes = set()
+    for segments in network.stops.values():
+        for s in segments:
+            modes.add(s.mode_of_transport)
+
+    if not modes:
+        print("\nNo transport modes detected in the current network.")
+        return None
+
+    modes_list = sorted(modes)
+    print("\nSelect transport medium preference (multi-select allowed):")
+    for i, m in enumerate(modes_list, 1):
+        print(f"  {i}. {m}")
+    any_index = len(modes_list) + 1
+    print(f"  {any_index}. Any / No preference")
+    print("Enter choices as numbers separated by commas (e.g. 1,3). Press Enter for Any.")
+
+    while True:
+        choice = input("Enter choice(s): ").strip()
+        if choice == "":
+            return None
+
+        # Parse comma-separated choices and ranges
+        parts = [p.strip() for p in choice.split(',') if p.strip()]
+        indices = set()
+        valid = True
+        for part in parts:
+            if '-' in part:
+                try:
+                    a, b = part.split('-')
+                    a_i = int(a)
+                    b_i = int(b)
+                    if a_i <= 0 or b_i <= 0 or a_i > b_i:
+                        valid = False
+                        break
+                    for v in range(a_i, b_i + 1):
+                        indices.add(v)
+                except Exception:
+                    valid = False
+                    break
+            else:
+                try:
+                    v = int(part)
+                    indices.add(v)
+                except Exception:
+                    valid = False
+                    break
+
+        if not valid:
+            print("Invalid input. Use numbers like '1' or '1,3' or ranges '1-3'.")
+            continue
+
+        # If user selected Any
+        if any_index in indices:
+            return None
+
+        # Validate indices and map to modes
+        selected = set()
+        out_of_range = False
+        for idx in indices:
+            if 1 <= idx <= len(modes_list):
+                selected.add(modes_list[idx - 1])
+            else:
+                out_of_range = True
+                break
+
+        if out_of_range or not selected:
+            print("Invalid selection. Please choose from the listed numbers.")
+            continue
+
+        return selected
+
+
+def filter_journeys_by_transport(journeys: List[Journey], preferred_modes: Optional[set]) -> List[Journey]:
+    """Filter journeys according to preferred transport modes.
+
+    Behaviour:
+    - If preferred_modes is None or empty: return journeys unchanged.
+    - If a single mode selected: strict policy (all segments must be in the mode set).
+    - If multiple modes selected: permissive policy (at least one segment matches).
+    """
+    if not preferred_modes:
+        return journeys
+
+    if len(preferred_modes) == 1:
+        # Strict: all segments must be in preferred_modes
+        return [j for j in journeys if all(s.mode_of_transport in preferred_modes for s in j.segments)]
+    else:
+        # Permissive: at least one segment matches
+        return [j for j in journeys if any(s.mode_of_transport in preferred_modes for s in j.segments)]
+
+
 # =============================================================================
 # Display Functions
 # =============================================================================
@@ -926,7 +1025,7 @@ def display_journeys(journeys: List[Journey], origin: str, destination: str,
 
         for j, segment in enumerate(journey.segments, 1):
             print(f"    {j}. {segment.from_stop} -> {segment.to_stop} "
-                  f"({segment.duration}min, ${segment.cost:.2f})")
+                f"({segment.duration}min, ${segment.cost:.2f}) [{segment.mode_of_transport}]")
 
         print()
 
@@ -1021,8 +1120,16 @@ def query_journeys(network: TransportNetwork, fare_lookup: Dict[Tuple[str, str],
     # Get preference
     preference = get_preference()
 
-    # Generate and display journeys
+    # Get transport medium preference (multi-select)
+    transport_pref = get_transport_preferences(network)
+
+    # Generate journeys
     journeys = generate_journeys(network, fare_lookup, origin, destination)
+
+    # Apply transport-mode filter (if any)
+    journeys = filter_journeys_by_transport(journeys, transport_pref)
+
+    # Display results
     display_journeys(journeys, origin, destination, preference)
 
 
@@ -1036,47 +1143,6 @@ def load_network_interactive() -> Tuple[Optional[TransportNetwork], Dict[Tuple[s
 
     network, fare_lookup, warnings = load_network(filename)
     return network, fare_lookup, warnings
-
-
-# =============================================================================
-# Case Study Runner
-# =============================================================================
-
-def run_case_study(network: TransportNetwork, fare_lookup: Dict[Tuple[str, str], float], origin: str, destination: str,
-                   preference: str) -> None:
-    """Runs a case study with given parameters.
-
-    Args:
-        network: The transport network
-        origin: Origin stop name
-        destination: Destination stop name
-        preference: Preference mode
-    """
-    print(f"\n{'#' * 60}")
-    print(f"# Case Study: {origin} -> {destination}")
-    print(f"# Preference: {preference}")
-    print(f"{'#' * 60}")
-
-    is_valid, error_msg, origin, destination = validate_stops(network, origin, destination)
-    if not is_valid:
-        print(f"\n{error_msg}")
-        return
-
-    journeys = generate_journeys(network, fare_lookup, origin, destination)
-    display_journeys(journeys, origin, destination, preference, top_n=5)
-
-
-def run_batch_cases(network: TransportNetwork, fare_lookup: Dict[Tuple[str, str], float], cases: List[Tuple[str, str, str]]) -> None:
-    """Runs multiple case studies in batch mode.
-
-    Args:
-        network: The transport network
-        cases: List of (origin, destination, preference) tuples
-    """
-    for origin, dest, pref in cases:
-        run_case_study(network, fare_lookup, origin, dest, pref)
-        print()
-
 
 # =============================================================================
 # Main Entry Point
@@ -1129,79 +1195,6 @@ def main():
 
         else:
             print("\nInvalid choice. Please enter a number 1-5.")
-
-
-# Alternative main for batch case study testing
-def load_case_studies(filename: str) -> List[Tuple[str, str, str]]:
-    """Loads case studies from a text file.
-
-    File format:
-        origin,destination,preference
-        # comments ignored
-
-    Returns:
-        List of (origin, destination, preference) tuples
-    """
-    cases = []
-    if not os.path.exists(filename):
-        print(f"Warning: {filename} not found, using default cases")
-        return [
-            ("Central", "Sha Tin", "cheapest"),
-            ("Kowloon Tong", "Causeway Bay", "fastest"),
-            ("Tuen Mun", "Tsuen Wan", "fewest"),
-            ("Prince Edward", "Ocean Park", "fastest"),
-        ]
-
-    try:
-        with open(filename, 'r', encoding='utf-8') as f:
-            for line_num, line in enumerate(f, 1):
-                line = line.strip()
-                if not line or line.startswith('#'):
-                    continue
-                parts = [p.strip() for p in line.split(',')]
-                if len(parts) == 3:
-                    origin, destination, preference = parts
-                    if preference in ['cheapest', 'fastest', 'fewest']:
-                        cases.append((origin, destination, preference))
-                    else:
-                        print(f"Warning: Invalid preference '{preference}' in line {line_num}")
-                else:
-                    print(f"Warning: Invalid format in line {line_num}: {line}")
-    except Exception as e:
-        print(f"Error reading {filename}: {str(e)}")
-        return cases
-
-    return cases
-
-
-def main_batch_test():
-    """Alternative main for testing with predefined case studies."""
-    # Try all transport data first, fall back to network.csv
-    print("Loading complete transport network...")
-    network, fare_lookup, warnings = load_network_all()
-
-    if not network.all_stops:
-        print(f"Loading network from 'network.csv'...")
-        network, fare_lookup, warnings = load_network("network.csv")
-
-    for warning in warnings:
-        print(warning)
-
-    if not network.all_stops:
-        print("Error: Could not load network. Exiting.")
-        return
-
-    # Load case studies from file
-    cases = load_case_studies('case_studies.txt')
-
-    print(f"\nLoaded {len(cases)} case studies from case_studies.txt")
-
-    print("\n" + "=" * 60)
-    print("Running Case Studies")
-    print("=" * 60)
-
-    run_batch_cases(network, fare_lookup, cases)
-
 
 if __name__ == "__main__":
     # Check if running in batch test mode
