@@ -1062,6 +1062,288 @@ def validate_stops(network: TransportNetwork, origin: str, destination: str) -> 
     return True, "", origin_norm, dest_norm
 
 
+def get_stop_suggestions(network: TransportNetwork, query: str, limit: int = 5) -> List[str]:
+    """Get stop name suggestions matching the query (case-insensitive)."""
+    if not query or not network.all_stops:
+        return []
+
+    query_lower = query.lower()
+    matches = []
+
+    for stop in network.all_stops:
+        stop_lower = stop.lower()
+        # Prefix match gets priority
+        if stop_lower.startswith(query_lower):
+            matches.append((0, stop))
+        elif query_lower in stop_lower:
+            matches.append((1, stop))
+
+    # Sort by priority (prefix first), then alphabetically
+    matches.sort(key=lambda x: (x[0], x[1].lower()))
+    return [m[1] for m in matches[:limit]]
+
+
+def _rl_complete(text: str, state: int, stops: List[str]) -> str:
+    """Readline completion - tries to match ALL words user typed."""
+    MIN_CHARS = 2
+
+    if len(text) < MIN_CHARS:
+        return None
+
+    # Try to get full line buffer from both readline and pyreadline3
+    full_line = text
+    try:
+        import readline
+        full_line = readline.get_line_buffer() or text
+    except Exception:
+        pass
+
+    # If still just partial word, try pyreadline3 way
+    if full_line == text or len(full_line.split()) <= 1:
+        try:
+            import pyreadline3.console as console
+            import pyreadline3.lineeditor as lineeditor
+            # Try to get current line from pyreadline3
+            try:
+                from pyreadline3 import Readline
+                rl = Readline()
+                full_line = rl.get_line_buffer() or text
+            except:
+                pass
+        except:
+            pass
+
+    search_lower = full_line.lower()
+    words = search_lower.split()
+    if not words:
+        return None
+
+    # ALL words must be in stop name
+    matches = []
+    for stop in stops:
+        stop_lower = stop.lower()
+        if all(word in stop_lower for word in words):
+            matches.append(stop)
+
+    if state < len(matches):
+        return matches[state]
+    return None
+
+
+def _key_readline(prompt: str, stops: List[str]) -> str:
+    """Custom input with inline autocomplete using TAB."""
+    try:
+        import msvcrt
+    except ImportError:
+        # Not Windows - use regular input
+        return input(prompt)
+
+    # Windows implementation with TAB detection
+    import msvcrt
+
+    MIN_CHARS = 2
+    cursor_pos = 0
+    buffer = ""
+
+    print(prompt, end="", flush=True)
+
+    while True:
+        key = msvcrt.getch()
+
+        # TAB key
+        if key == b'\t':
+            # Check if we have enough characters
+            if len(buffer) >= MIN_CHARS:
+                # Try to autocomplete with ALL words
+                normalized = " ".join(buffer.lower().split())
+                words = normalized.split()
+
+                matches = []
+                for stop in stops:
+                    stop_lower = stop.lower()
+                    if all(w in stop_lower for w in words):
+                        matches.append(stop)
+
+                if matches:
+                    # Complete to first match
+                    buffer = matches[0]
+                    cursor_pos = len(buffer)
+                    # Clear and reprint
+                    print("\r" + " " * 80 + "\r" + prompt + buffer, end="", flush=True)
+            continue
+
+        # Enter key
+        elif key == b'\r' or key == b'\n':
+            print()
+            return buffer
+
+        # Backspace
+        elif key == b'\x08':
+            if cursor_pos > 0:
+                buffer = buffer[:cursor_pos - 1] + buffer[cursor_pos:]
+                cursor_pos -= 1
+                print("\b \b", end="", flush=True)
+            continue
+
+        # Regular character (ASCII)
+        elif len(key) == 1 and 32 <= ord(key) <= 126:
+            char = key.decode('utf-8', errors='ignore')
+            buffer = buffer[:cursor_pos] + char + buffer[cursor_pos:]
+            cursor_pos += 1
+            print(key.decode('utf-8'), end="", flush=True)
+            continue
+
+
+def _get_full_line() -> str:
+    """Get the full line buffer from readline/pyreadline3."""
+    try:
+        import readline
+        return readline.get_line_buffer() or ""
+    except ImportError:
+        pass
+    except Exception:
+        pass
+
+    try:
+        from pyreadline3 import Readline
+        return Readline().get_line_buffer()
+    except Exception:
+        pass
+
+    return ""
+
+
+def _rl_complete(text: str, state: int, stops: List[str]) -> str:
+    """Readline completion matching ALL typed words."""
+    MIN_CHARS = 2
+    if len(text) < MIN_CHARS:
+        return None
+
+    # Get full line
+    full_line = _get_full_line() or text
+
+    words = full_line.lower().split()
+    if not words:
+        return None
+
+    # All words must be in stop
+    matches = [s for s in stops if all(w in s.lower() for w in words)]
+
+    if state < len(matches):
+        return matches[state]
+    return None
+
+
+def prompt_stop_input(prompt_msg: str, network: TransportNetwork) -> str:
+    """Prompt for stop input with TAB autocomplete."""
+    stops = sorted(network.all_stops, key=str.lower)
+
+    # Set up TAB completion
+    try:
+        import readline
+        readline.set_completer(lambda t, s: _rl_complete(t, s, stops))
+        readline.parse_and_bind("tab: complete")
+    except ImportError:
+        try:
+            import pyreadline3 as rl
+            rl.set_completer(lambda t, s: _rl_complete(t, s, stops))
+        except ImportError:
+            pass
+
+    while True:
+        user_input = input(prompt_msg).strip()
+        if not user_input:
+            print("Please enter a stop name.")
+            continue
+
+        normalized = " ".join(user_input.lower().split())
+
+        # Exact
+        exact = next((s for s in stops if s.lower() == normalized), None)
+        if exact:
+            return exact
+
+        # All words match
+        words = normalized.split()
+        if words:
+            matches = [s for s in stops if all(w in s.lower() for w in words)]
+            if matches:
+                if len(matches) == 1:
+                    print(f"  -> {matches[0]}")
+                    return matches[0]
+                print(f"  Matches: {', '.join(matches[:8])}")
+                continue
+
+        print(f"Error: No stop found matching '{user_input}'")
+
+
+def _rl_complete(text: str, state: int, stops: List[str]) -> str:
+    """Readline completion - matches ALL words user typed."""
+    MIN_CHARS = 2
+
+    if len(text) < MIN_CHARS:
+        return None
+
+    # Get full line buffer
+    full_line = text
+
+    # Try standard readline
+    try:
+        import readline
+        buf = readline.get_line_buffer()
+        if buf:
+            full_line = buf
+    except ImportError:
+        pass
+
+    # Try pyreadline3 specific way
+    if full_line == text:
+        try:
+            import pyreadline3 as rl
+            # Try to get instance and its buffer
+            inst = rl.GetReadline()
+            if hasattr(inst, 'line_buffer'):
+                full_line = inst.line_buffer
+            elif hasattr(inst, 'get_line_buffer'):
+                full_line = inst.get_line_buffer()
+        except:
+            pass
+
+    if not full_line:
+        full_line = text
+
+    search_lower = full_line.lower()
+    words = search_lower.split()
+    if not words:
+        return None
+
+    # ALL words must be in stop name
+    matches = []
+    for stop in stops:
+        stop_lower = stop.lower()
+        if all(word in stop_lower for word in words):
+            matches.append(stop)
+
+    if state < len(matches):
+        return matches[state]
+    return None
+
+
+def _matches_all_words(text: str, stops: List[str]) -> List[str]:
+    """Return stops where ALL words in text are found in the stop name."""
+    text_lower = text.lower()
+    words = text_lower.split()
+    if not words:
+        return []
+
+    matches = []
+    for stop in stops:
+        stop_lower = stop.lower()
+        if all(word in stop_lower for word in words):
+            matches.append(stop)
+    return matches
+
+
 def get_preference() -> str:
     """Prompts user for preference mode and returns valid preference.
 
@@ -1095,21 +1377,10 @@ def query_journeys(network: TransportNetwork, fare_lookup: Dict[Tuple[str, str],
         print("\nError: No network loaded. Please load a network first.")
         return
 
-    # Get origin
-    print("\nTip: Use option 1 to search/list stops if needed.")
-
-    while True:
-        origin = input("\nEnter origin stop: ").strip()
-        if origin:
-            break
-        print("Please enter a stop name.")
-
-    # Get destination
-    while True:
-        destination = input("Enter destination stop: ").strip()
-        if destination:
-            break
-        print("Please enter a stop name.")
+    # Get origin and destination with autocomplete
+    print("\nTip: Start typing a stop name, see suggestions below.")
+    origin = prompt_stop_input("\nEnter origin stop: ", network)
+    destination = prompt_stop_input("Enter destination stop: ", network)
 
     # Validate stops
     is_valid, error_msg, origin, destination = validate_stops(network, origin, destination)
