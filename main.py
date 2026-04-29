@@ -582,34 +582,49 @@ def load_network_from_bus() -> Tuple[TransportNetwork, Dict[Tuple[str, str], flo
             network.add_segment(reverse_segment)
             segments_added += 1
 
-    # Add walking segments between close bus stops
+    # Add walking segments between close bus stops (limited)
     walking_segments = 0
-    for i, (stop1, (x1, y1)) in enumerate(stop_coords.items()):
-        for stop2, (x2, y2) in list(stop_coords.items())[i+1:]:
-            dist = math.sqrt((x2 - x1)**2 + (y2 - y1)**2)  # Euclidean distance in coordinate units
-            if dist < 500:  # within 500 units (assume meters)
-                duration = max(1, int(dist / 84))  # minutes, walking at 1.4 m/s = 84 m/min, at least 1 min
-                # Add bidirectional walking
+    max_walking_per_stop = 5  # Limit walking connections per stop
+    walking_per_stop = {}
+    for stop1, (x1, y1) in stop_coords.items():
+        walking_per_stop[stop1] = 0
+
+    for stop1, (x1, y1) in stop_coords.items():
+        if walking_per_stop.get(stop1, 0) >= max_walking_per_stop:
+            continue
+        # Sort stops by distance and take closest
+        distances = []
+        for stop2, (x2, y2) in stop_coords.items():
+            if stop1 != stop2:
+                dist = math.sqrt((x2 - x1)**2 + (y2 - y1)**2)
+                distances.append((dist, stop2, x2, y2))
+        distances.sort()
+        for dist, stop2, x2, y2 in distances[:max_walking_per_stop]:
+            if dist < 300:  # within 300 units
+                duration = max(1, int(dist / 84))
                 network.add_segment(Segment(stop1, stop2, duration, 0.0, mode='Walk'))
                 network.add_segment(Segment(stop2, stop1, duration, 0.0, mode='Walk'))
                 walking_segments += 2
+                walking_per_stop[stop1] = walking_per_stop.get(stop1, 0) + 1
+                walking_per_stop[stop2] = walking_per_stop.get(stop2, 0) + 1
 
     # Add walking transfers between MTR/light rail stations and bus stops with similar names
     transfer_segments = 0
     major_stations = {'Central', 'Admiralty', 'Tsim Sha Tsui', 'Mong Kok', 'Prince Edward', 'Yau Ma Tei', 'Jordan', 'Sham Shui Po', 'Cheung Sha Wan', 'Lai Chi Kok', 'Mei Foo', 'Tsuen Wan', 'Kwai Fong', 'Kwai Hing', 'Tai Wo Hau'}
     for mtr_stop in network.all_stops:
-        # Skip if it's a bus stop (already has coords)
         if mtr_stop in stop_coords:
             continue
         if mtr_stop not in major_stations:
             continue
+        added = 0
         for bus_stop in stop_coords:
-            # Check if bus stop contains MTR stop name
+            if added >= 3:  # Limit to 3 transfers per station
+                break
             if mtr_stop.lower() in bus_stop.lower():
-                # Add transfer walking, 5 min, 0 cost
                 network.add_segment(Segment(mtr_stop, bus_stop, 5, 0.0, mode='Walk'))
                 network.add_segment(Segment(bus_stop, mtr_stop, 5, 0.0, mode='Walk'))
                 transfer_segments += 2
+                added += 1
 
     warnings.append(f"Loaded bus: {len([s for s in network.all_stops if s in stop_coords])} bus stops, {segments_added} bus segments, {walking_segments} walking segments, {transfer_segments} transfer segments")
     return network, {}, warnings
@@ -1468,8 +1483,31 @@ def main():
             print("\nInvalid choice. Please enter a number 1-5.")
 
 if __name__ == "__main__":
+    # Check if running in GUI mode
+    if len(sys.argv) > 1 and sys.argv[1] == "--gui":
+        from gui.main_window import run_gui
+        from main import load_network_all
+
+        print("Loading transport network for GUI...")
+        network, fare_lookup, warnings = load_network_all()
+
+        if not network.all_stops:
+            print("Loading default network from 'network.csv'...")
+            network, fare_lookup, warnings = load_network("network.csv")
+
+        for warning in warnings:
+            print(warning)
+
+        if not network.all_stops:
+            print("Error: No network could be loaded.")
+            sys.exit(1)
+
+        print(f"Loaded: {len(network.all_stops)} stops")
+        print("Starting GUI...")
+        run_gui(network, fare_lookup)
+
     # Check if running in batch test mode
-    if len(sys.argv) > 1 and sys.argv[1] == "--batch":
+    elif len(sys.argv) > 1 and sys.argv[1] == "--batch":
         pass
     else:
         main()
