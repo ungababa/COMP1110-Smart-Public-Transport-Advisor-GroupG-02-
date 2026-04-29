@@ -120,22 +120,34 @@ STATION_COORDS = {
     'Yuen Long': (22.4461, 114.0352),
 }
 
-# Map bounds matching the grid on your image
-# Left edge: lon 114.4, Right: lon 113.8
-# Top edge: lat 22.6, Bottom: lat 22.2
-MAP_MIN_LAT = 22.20
-MAP_MAX_LAT = 22.65
-MAP_MIN_LON = 113.80
-MAP_MAX_LON = 114.45
-MAP_WIDTH = 800
-MAP_HEIGHT = 600
+# Map image dimensions (from Hong Kong Base Map.png)
+MAP_PIXEL_WIDTH = 3214
+MAP_PIXEL_HEIGHT = 2339
+
+# Geographic bounds of the map image
+MAP_WEST = 113.83   # Min longitude (left edge)
+MAP_EAST = 114.44   # Max longitude (right edge)
+MAP_NORTH = 22.56  # Max latitude (top edge)
+MAP_SOUTH = 22.15  # Min latitude (bottom edge)
 
 
-def latlon_to_pixel(lat, lon):
-    """Convert lat/lon to pixel coordinates.
-    Flipped: higher lon = left, lower lat = top"""
-    x = (MAP_MAX_LON - lon) / (MAP_MAX_LON - MAP_MIN_LON) * MAP_WIDTH
-    y = (MAP_MAX_LAT - lat) / (MAP_MAX_LAT - MAP_MIN_LAT) * MAP_HEIGHT
+def map_range(lat, lon):
+    """Map latitude/longitude to pixel coordinates on the map image.
+
+    Args:
+        lat: Latitude (22.15 to 22.56)
+        lon: Longitude (113.83 to 114.44)
+
+    Returns:
+        Tuple of (x, y) pixel coordinates
+
+    X-axis: West (113.83) -> 0 (left), East (114.44) -> MAP_PIXEL_WIDTH (right)
+    Y-axis: North (22.56) -> 0 (top), South (22.15) -> MAP_PIXEL_HEIGHT (bottom)
+
+    Offset applied: +150 X (east), +200 Y (south) for visual alignment.
+    """
+    x = (lon - MAP_WEST) / (MAP_EAST - MAP_WEST) * MAP_PIXEL_WIDTH + 85
+    y = (MAP_NORTH - lat) / (MAP_NORTH - MAP_SOUTH) * MAP_PIXEL_HEIGHT + 85
     return x, y
 
 
@@ -160,14 +172,14 @@ class HKMapWidget(QWidget):
 
         self.view = QGraphicsView()
         self.scene = QGraphicsScene()
-        self.scene.setSceneRect(0, 0, MAP_WIDTH, MAP_HEIGHT)
+        self.scene.setSceneRect(0, 0, MAP_PIXEL_WIDTH, MAP_PIXEL_HEIGHT)
         self.view.setScene(self.scene)
         self.view.setRenderHint(QPainter.RenderHint.Antialiasing)
         self.view.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
         self.view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         # Fit the view to the map image initially
-        self.view.fitInView(0, 0, MAP_WIDTH, MAP_HEIGHT)
+        self.view.fitInView(0, 0, MAP_PIXEL_WIDTH, MAP_PIXEL_HEIGHT)
         layout.addWidget(self.view)
 
         self._load_background()
@@ -213,15 +225,17 @@ class HKMapWidget(QWidget):
         for stop in self.network.all_stops:
             if stop in STATION_COORDS:
                 lat, lon = STATION_COORDS[stop]
-                x, y = latlon_to_pixel(lat, lon)
+                x, y = map_range(lat, lon)
                 self.stop_positions[stop] = (x, y)
 
                 # Determine color
                 color = MODE_COLORS.get('MTR', QColor(100, 100, 100))
 
-                ellipse = QGraphicsEllipseItem(x - 4, y - 4, 8, 8)
+                # Scale station marker to map size (larger for high-res map)
+                size = 16
+                ellipse = QGraphicsEllipseItem(x - size/2, y - size/2, size, size)
                 ellipse.setBrush(QBrush(color))
-                ellipse.setPen(QPen(Qt.GlobalColor.white, 1))
+                ellipse.setPen(QPen(Qt.GlobalColor.white, 2))
                 ellipse.setZValue(1)
                 self.scene.addItem(ellipse)
 
