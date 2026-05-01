@@ -151,50 +151,79 @@ def load_bus_stops():
     """Load bus stop coordinates from STOP_BUS.xml and RSTOP_BUS.xml."""
     stop_id_coords   = {}
     stop_name_coords = {}
-    stop_id_to_names = {}
-
-    # Coordinates
-    for xml_path in [
-        Path('bus/STOP_BUS.xml'),
-        Path(__file__).parent.parent / 'bus' / 'STOP_BUS.xml',
-    ]:
-        if xml_path.exists():
-            try:
-                root = ET.parse(xml_path).getroot()
-                for stop_elem in root.findall('STOP'):
-                    stop_id = stop_elem.findtext('STOP_ID')
-                    lat_str = stop_elem.findtext('X')
-                    lon_str = stop_elem.findtext('Y')
-                    if stop_id and lat_str and lon_str:
-                        try:
-                            stop_id_coords[stop_id] = (float(lat_str), float(lon_str))
-                        except ValueError:
-                            continue
-                print(f"Loaded {len(stop_id_coords)} bus stops from STOP_BUS.xml")
-            except Exception as e:
-                print(f"Error loading bus stops: {e}")
+    stop_id_to_names = {}  # stop_id -> set of stop_names
+    
+    # Load coordinates from STOP_BUS.xml by stop_id
+    xml_paths = [
+        Path('data/bus/STOP_BUS.xml'),
+        Path('gui/../data/bus/STOP_BUS.xml'),
+        Path(__file__).parent.parent / 'data' / 'bus' / 'STOP_BUS.xml',
+    ]
+    
+    xml_file = None
+    for path in xml_paths:
+        if path.exists():
+            xml_file = path
             break
+    
+    if xml_file:
+        try:
+            tree = ET.parse(xml_file)
+            root = tree.getroot()
+            
+            for stop_elem in root.findall('STOP'):
+                stop_id = stop_elem.findtext('STOP_ID')
+                lat_str = stop_elem.findtext('X')
+                lon_str = stop_elem.findtext('Y')
+                
+                if stop_id and lat_str and lon_str:
+                    try:
+                        lat = float(lat_str)
+                        lon = float(lon_str)
+                        stop_id_coords[stop_id] = (lat, lon)
+                    except ValueError:
+                        continue
+            
+            print(f"Loaded {len(stop_id_coords)} bus stops from STOP_BUS.xml")
+        
+        except Exception as e:
+            print(f"Error loading bus stops: {e}")
     else:
         print("Warning: STOP_BUS.xml not found.")
-
-    # Names
-    for xml_path in [
-        Path('bus/RSTOP_BUS.xml'),
-        Path(__file__).parent.parent / 'bus' / 'RSTOP_BUS.xml',
-    ]:
-        if xml_path.exists():
-            try:
-                root = ET.parse(xml_path).getroot()
-                for route_elem in root.findall('RSTOP'):
-                    stop_id   = route_elem.findtext('STOP_ID')
-                    stop_name = route_elem.findtext('STOP_NAMEE')
-                    if stop_id and stop_name and stop_id in stop_id_coords:
-                        stop_id_to_names.setdefault(stop_id, set()).add(stop_name)
-                        if stop_name not in stop_name_coords:
-                            stop_name_coords[stop_name] = stop_id_coords[stop_id]
-            except Exception as e:
-                print(f"Error loading stop names: {e}")
+    
+    # Load stop names from RSTOP_BUS.xml and map to coordinates
+    xml_paths = [
+        Path('data/bus/RSTOP_BUS.xml'),
+        Path('gui/../data/bus/RSTOP_BUS.xml'),
+        Path(__file__).parent.parent / 'data' / 'bus' / 'RSTOP_BUS.xml',
+    ]
+    
+    xml_file = None
+    for path in xml_paths:
+        if path.exists():
+            xml_file = path
             break
+    
+    if xml_file:
+        try:
+            tree = ET.parse(xml_file)
+            root = tree.getroot()
+            
+            for route_elem in root.findall('RSTOP'):
+                stop_id = route_elem.findtext('STOP_ID')
+                # Get English name (STOP_NAMEE)
+                stop_name = route_elem.findtext('STOP_NAMEE')
+                
+                if stop_id and stop_name and stop_id in stop_id_coords:
+                    if stop_id not in stop_id_to_names:
+                        stop_id_to_names[stop_id] = set()
+                    stop_id_to_names[stop_id].add(stop_name)
+                    # Map stop name to coordinates (only add if not already mapped)
+                    if stop_name not in stop_name_coords:
+                        stop_name_coords[stop_name] = stop_id_coords[stop_id]
+        
+        except Exception as e:
+            print(f"Error loading stop names: {e}")
     else:
         print("Warning: RSTOP_BUS.xml not found.")
 
@@ -205,85 +234,46 @@ def load_bus_stops():
 def identify_important_bus_stations(stop_id_coords):
     """Return the top 300 bus stops by route density."""
     stop_route_count = {}
-
-    for xml_path in [
-        Path('bus/RSTOP_BUS.xml'),
-        Path(__file__).parent.parent / 'bus' / 'RSTOP_BUS.xml',
-    ]:
-        if xml_path.exists():
-            try:
-                root = ET.parse(xml_path).getroot()
-                for route_elem in root.findall('RSTOP'):
-                    stop_id = route_elem.findtext('STOP_ID')
-                    if stop_id and stop_id in stop_id_coords:
-                        stop_route_count[stop_id] = stop_route_count.get(stop_id, 0) + 1
-            except Exception as e:
-                print(f"Error identifying important bus stations: {e}")
+    
+    # Try to find the XML file in bus directory
+    xml_paths = [
+        Path('data/bus/RSTOP_BUS.xml'),
+        Path('gui/../data/bus/RSTOP_BUS.xml'),
+        Path(__file__).parent.parent / 'data' / 'bus' / 'RSTOP_BUS.xml',
+    ]
+    
+    xml_file = None
+    for path in xml_paths:
+        if path.exists():
+            xml_file = path
             break
-    else:
-        print("Warning: RSTOP_BUS.xml not found.")
+    
+    if not xml_file:
+        print("Warning: RSTOP_BUS.xml not found. All bus stops will be treated equally.")
+        return important_stops
+    
+    try:
+        tree = ET.parse(xml_file)
+        root = tree.getroot()
+        
+        # Count routes per stop
+        for route_elem in root.findall('RSTOP'):
+            stop_id = route_elem.findtext('STOP_ID')
+            if stop_id and stop_id in stop_id_coords:
+                stop_route_count[stop_id] = stop_route_count.get(stop_id, 0) + 1
+        
+        # Select top 300 stops by route count
+        MAX_IMPORTANT_STOPS = 300
+        sorted_stops = sorted(stop_route_count.items(), key=lambda x: x[1], reverse=True)
+        for stop_id, count in sorted_stops[:MAX_IMPORTANT_STOPS]:
+            important_stops[stop_id] = count
+    
+    except Exception as e:
+        print(f"Error identifying important bus stations: {e}")
+    
+    print(f"Identified {len(important_stops)} top important bus interchanges (top 300 by route density)")
+    return important_stops
 
-    sorted_stops = sorted(stop_route_count.items(), key=lambda x: x[1], reverse=True)
-    important = dict(sorted_stops[:300])
-    print(f"Identified {len(important)} top important bus interchanges (top 300 by route density)")
-    return important
-
-
-# ── Custom QGraphicsView with scroll-zoom and click detection ─────────────────
-
-class _MapView(QGraphicsView):
-    """QGraphicsView subclass that adds scroll-wheel zoom and clickable station dots."""
-
-    stationClicked = pyqtSignal(str)
-
-    def __init__(self, scene, parent=None):
-        super().__init__(scene, parent)
-        self.setRenderHint(QPainter.RenderHint.Antialiasing)
-        self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
-
-        # Maps graphics item → station name for click detection
-        self._station_map: dict = {}
-        self._press_pos = None
-
-    def register_station(self, name: str, item: QGraphicsEllipseItem):
-        self._station_map[item] = name
-
-    def clear_station_registry(self):
-        self._station_map.clear()
-
-    def wheelEvent(self, event):
-        """Scroll-wheel zooms in/out centred on the cursor."""
-        factor = 1.15 if event.angleDelta().y() > 0 else 1.0 / 1.15
-        self.scale(factor, factor)
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            self._press_pos = event.pos()
-        super().mousePressEvent(event)
-
-    def mouseReleaseEvent(self, event):
-        """Treat release as a click only when the mouse barely moved (not a drag)."""
-        if event.button() == Qt.MouseButton.LeftButton and self._press_pos is not None:
-            delta = event.pos() - self._press_pos
-            if delta.manhattanLength() < 6:
-                scene_pos = self.mapToScene(event.pos())
-                hit = self.scene().items(
-                    QRectF(scene_pos.x() - 12, scene_pos.y() - 12, 24, 24)
-                )
-                for item in hit:
-                    if item in self._station_map:
-                        self.stationClicked.emit(self._station_map[item])
-                        self._press_pos = None
-                        super().mouseReleaseEvent(event)
-                        return
-        self._press_pos = None
-        super().mouseReleaseEvent(event)
-
-
-# ── Main map widget ───────────────────────────────────────────────────────────
 
 class HKMapWidget(QWidget):
     """Widget for displaying Hong Kong transport map."""
@@ -356,20 +346,6 @@ class HKMapWidget(QWidget):
         self._load_background()
 
     def _load_background(self):
-        # Prefer the dark stylised map; fall back to the original if absent
-        for candidate in ('Hong_Kong_Dark_Map.png', 'Hong_Kong_Base_Map.png'):
-            if os.path.exists(candidate):
-                try:
-                    pixmap = QPixmap(candidate)
-                    bg = self.scene.addPixmap(pixmap)
-                    bg.setZValue(-1)
-                    print(f"Map background loaded: {candidate}")
-                    return
-                except Exception as e:
-                    print(f"Error loading {candidate}: {e}")
-        print("Warning: no map background file found.")
-
-    # ── Network rendering ─────────────────────────────────────────────────────
         try:
             img_paths = [
                 Path('data/Hong_Kong_Base_Map.png'),
