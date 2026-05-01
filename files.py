@@ -152,7 +152,7 @@ def load_network_from_mtr() -> Tuple[TransportNetwork, Dict[Tuple[str, str], flo
             for row in reader:
                 src = row.get('SRC_STATION_NAME', '').strip()
                 dest = row.get('DEST_STATION_NAME', '').strip()
-                std_fare = row.get('OCT_STD_FARE', '').strip()
+                std_fare = row.get('OCT_ADT_FARE', '').strip()
                 if src and dest and std_fare:
                     try:
                         fare_lookup[(src, dest)] = float(std_fare)
