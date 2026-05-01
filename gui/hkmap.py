@@ -234,6 +234,7 @@ def load_bus_stops():
 def identify_important_bus_stations(stop_id_coords):
     """Return the top 300 bus stops by route density."""
     stop_route_count = {}
+    important_stops  = {}
     
     # Try to find the XML file in bus directory
     xml_paths = [
@@ -274,6 +275,62 @@ def identify_important_bus_stations(stop_id_coords):
     print(f"Identified {len(important_stops)} top important bus interchanges (top 300 by route density)")
     return important_stops
 
+
+# ── Custom QGraphicsView with scroll-zoom and click detection ─────────────────
+
+class _MapView(QGraphicsView):
+    """QGraphicsView subclass that adds scroll-wheel zoom and clickable station dots."""
+
+    stationClicked = pyqtSignal(str)
+
+    def __init__(self, scene, parent=None):
+        super().__init__(scene, parent)
+        self.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
+
+        # Maps graphics item → station name for click detection
+        self._station_map: dict = {}
+        self._press_pos = None
+
+    def register_station(self, name: str, item: QGraphicsEllipseItem):
+        self._station_map[item] = name
+
+    def clear_station_registry(self):
+        self._station_map.clear()
+
+    def wheelEvent(self, event):
+        """Scroll-wheel zooms in/out centred on the cursor."""
+        factor = 1.15 if event.angleDelta().y() > 0 else 1.0 / 1.15
+        self.scale(factor, factor)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._press_pos = event.pos()
+        super().mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        """Treat release as a click only when the mouse barely moved (not a drag)."""
+        if event.button() == Qt.MouseButton.LeftButton and self._press_pos is not None:
+            delta = event.pos() - self._press_pos
+            if delta.manhattanLength() < 6:
+                scene_pos = self.mapToScene(event.pos())
+                hit = self.scene().items(
+                    QRectF(scene_pos.x() - 12, scene_pos.y() - 12, 24, 24)
+                )
+                for item in hit:
+                    if item in self._station_map:
+                        self.stationClicked.emit(self._station_map[item])
+                        self._press_pos = None
+                        super().mouseReleaseEvent(event)
+                        return
+        self._press_pos = None
+        super().mouseReleaseEvent(event)
+
+
+# ── Main map widget ───────────────────────────────────────────────────────────
 
 class HKMapWidget(QWidget):
     """Widget for displaying Hong Kong transport map."""
@@ -346,22 +403,27 @@ class HKMapWidget(QWidget):
         self._load_background()
 
     def _load_background(self):
-        try:
-            img_paths = [
-                Path('data/Hong_Kong_Base_Map.png'),
-                Path(__file__).parent.parent / 'data' / 'Hong_Kong_Base_Map.png',
-            ]
-            img_file = None
-            for p in img_paths:
-                if p.exists():
-                    img_file = p
-                    break
-            if img_file:
-                pixmap = QPixmap(str(img_file))
-                self.bg_item = self.scene.addPixmap(pixmap)
-                self.bg_item.setZValue(-1)
-        except Exception as e:
-            print(f"Error loading background: {e}")
+        # Prefer the dark stylised map; fall back to the standard base map
+        root = Path(__file__).parent.parent
+        candidates = [
+            Path('Hong_Kong_Dark_Map.png'),
+            root / 'Hong_Kong_Dark_Map.png',
+            Path('Hong_Kong_Base_Map.png'),
+            root / 'Hong_Kong_Base_Map.png',
+            Path('data/Hong_Kong_Base_Map.png'),
+            root / 'data' / 'Hong_Kong_Base_Map.png',
+        ]
+        for candidate in candidates:
+            if candidate.exists():
+                try:
+                    pixmap = QPixmap(str(candidate))
+                    bg = self.scene.addPixmap(pixmap)
+                    bg.setZValue(-1)
+                    print(f"Map background loaded: {candidate}")
+                    return
+                except Exception as e:
+                    print(f"Error loading {candidate}: {e}")
+        print("Warning: no map background file found.")
 
     def set_network(self, network):
         self.network = network
@@ -533,7 +595,7 @@ class HKMapWidget(QWidget):
         self._path_items.clear()
         self.status_label.setText("No journey selected")
 
-    # ── Internal helpers ──────────────────────────────────────────────────────
+    # ── Internal helpers ────────────────────────────────────────────────────────────
 
     def _add_endpoint_marker(self, pos, color: QColor, size: int):
         r = size / 2
