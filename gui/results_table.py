@@ -4,15 +4,15 @@ Journey results table widget
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QTableWidget,
-    QTableWidgetItem, QSplitter, QFrame
+    QTableWidgetItem, QFrame, QSizePolicy
 )
 from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QColor, QFont
 
 
 class ResultsTable(QWidget):
-    """Widget for displaying journey results in a table."""
+    """Widget for displaying journey results — click a row to highlight it on the map."""
 
-    # Signal emitted when user clicks on a journey row
     journeySelected = pyqtSignal(int)
 
     def __init__(self, parent=None):
@@ -22,83 +22,102 @@ class ResultsTable(QWidget):
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(6)
 
         # Title
         title = QLabel("Journey Results")
-        title.setStyleSheet("font-size: 16px; font-weight: bold;")
+        title.setStyleSheet("font-size: 14px; font-weight: bold;")
         layout.addWidget(title)
 
-        # Results table
+        # Table
         self.table = QTableWidget()
         self.table.setColumnCount(5)
-        self.table.setHorizontalHeaderLabels([
-            "#", "Segments", "Duration", "Cost", "Transport Modes"
-        ])
+        self.table.setHorizontalHeaderLabels(
+            ["#", "Duration", "Cost (HKD)", "Segments", "Modes Used"]
+        )
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
-        self.table.cellClicked.connect(self._on_cell_clicked)
+        self.table.setAlternatingRowColors(True)
+        self.table.setShowGrid(False)
+        self.table.horizontalHeader().setStretchLastSection(True)
+        self.table.cellClicked.connect(self._on_row_clicked)
+        self.table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         layout.addWidget(self.table)
 
-        # Details panel
-        self.details_label = QLabel("Select a journey to see details")
-        self.details_label.setFrameStyle(QFrame.Shape.StyledPanel | QFrame.Shadow.Raised)
-        self.details_label.setStyleSheet("padding: 8px; background-color: #f0f0f0;")
-        layout.addWidget(self.details_label)
+        # Detail panel
+        self.detail_panel = QLabel("← Select a journey above to see its step-by-step route")
+        self.detail_panel.setWordWrap(True)
+        self.detail_panel.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self.detail_panel.setFrameStyle(QFrame.Shape.StyledPanel | QFrame.Shadow.Raised)
+        self.detail_panel.setStyleSheet(
+            "padding: 10px; background-color: #181825; border-radius: 6px; "
+            "font-size: 12px; color: #cdd6f4;"
+        )
+        self.detail_panel.setMinimumHeight(100)
+        layout.addWidget(self.detail_panel)
 
     def set_journeys(self, journeys):
-        """Set the journeys to display."""
+        """Populate the table with a list of Journey objects."""
         self.journeys = journeys
         self.table.setRowCount(len(journeys))
 
-        for i, journey in enumerate(journeys):
-            # Row number
-            self.table.setItem(i, 0, QTableWidgetItem(str(i + 1)))
+        for i, j in enumerate(journeys):
+            modes = sorted({s.mode_of_transport for s in j.segments})
+            mode_str = " + ".join(modes)
 
-            # Segments
-            self.table.setItem(i, 1, QTableWidgetItem(str(journey.num_segments)))
+            items = [
+                QTableWidgetItem(str(i + 1)),
+                QTableWidgetItem(f"{j.total_duration} min"),
+                QTableWidgetItem(f"${j.total_cost:.2f}"),
+                QTableWidgetItem(str(j.num_segments)),
+                QTableWidgetItem(mode_str),
+            ]
+            for col, item in enumerate(items):
+                item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                self.table.setItem(i, col, item)
 
-            # Duration
-            self.table.setItem(i, 2, QTableWidgetItem(f"{journey.total_duration} min"))
-
-            # Cost
-            self.table.setItem(i, 3, QTableWidgetItem(f"${journey.total_cost:.2f}"))
-
-            # Transport modes
-            modes = set(s.mode_of_transport for s in journey.segments)
-            modes_str = ", ".join(sorted(modes))
-            self.table.setItem(i, 4, QTableWidgetItem(modes_str))
-
-        # Resize columns
         self.table.resizeColumnsToContents()
-        self.table.setColumnWidth(4, max(150, self.table.columnWidth(4)))
+        self.table.setColumnWidth(4, max(180, self.table.columnWidth(4)))
 
     def clear(self):
-        """Clear the results."""
         self.journeys = []
         self.table.setRowCount(0)
-        self.details_label.setText("Select a journey to see details")
+        self.detail_panel.setText("← Select a journey above to see its step-by-step route")
 
-    def _on_cell_clicked(self, row, column):
-        """Handle cell click."""
+    def _on_row_clicked(self, row, _col):
         if 0 <= row < len(self.journeys):
             self.journeySelected.emit(row)
-            self._show_details(row)
+            self._show_detail(row)
 
-    def _show_details(self, index):
-        """Show journey details in the details panel."""
+    def _show_detail(self, index):
         if index < 0 or index >= len(self.journeys):
             return
 
-        journey = self.journeys[index]
-        lines = []
-        lines.append(f"<b>Journey #{index + 1}</b>")
-        lines.append(f"Total: {journey.total_duration} min, ${journey.total_cost:.2f}")
-        lines.append("")
-        lines.append("<b>Segments:</b>")
+        j = self.journeys[index]
+        lines = [
+            f"<b>Journey #{index + 1}</b> &nbsp;·&nbsp; "
+            f"{j.total_duration} min &nbsp;·&nbsp; "
+            f"${j.total_cost:.2f} HKD &nbsp;·&nbsp; "
+            f"{j.num_segments} segment(s)<br>"
+        ]
 
-        for i, seg in enumerate(journey.segments, 1):
-            lines.append(f"  {i}. {seg.from_stop} → {seg.to_stop}")
-            lines.append(f"     {seg.duration} min, ${seg.cost:.2f} ({seg.mode_of_transport})")
+        # Group consecutive segments by mode for a cleaner display
+        for k, seg in enumerate(j.segments, 1):
+            mode_color = {
+                "MTR":            "#89b4fa",
+                "Bus":            "#a6e3a1",
+                "Light Rail":     "#fab387",
+                "Walk":           "#a6adc8",
+                "Airport Express":"#cba6f7",
+            }.get(seg.mode_of_transport, "#cdd6f4")
 
-        self.details_label.setText("<br>".join(lines))
+            lines.append(
+                f"<span style='color:{mode_color};'><b>{k}.</b> "
+                f"{seg.from_stop} → {seg.to_stop}</span> "
+                f"<span style='color:#a6adc8;'>({seg.duration} min, "
+                f"${seg.cost:.2f}, {seg.mode_of_transport})</span>"
+            )
+
+        self.detail_panel.setText("<br>".join(lines))
