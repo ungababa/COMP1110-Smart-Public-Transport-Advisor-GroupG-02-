@@ -1,0 +1,2 @@
+from main import test_print_all_networks
+test_print_all_networks()
