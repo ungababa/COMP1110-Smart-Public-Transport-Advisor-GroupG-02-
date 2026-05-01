@@ -12,6 +12,7 @@ from PyQt6.QtCore import Qt, QThread, QObject, pyqtSignal
 from .hkmap import HKMapWidget
 from .journey_form import JourneyForm
 from .results_table import ResultsTable
+from main import preference_to_optimization
 
 
 # ── Background search worker ──────────────────────────────────────────────────
@@ -30,8 +31,7 @@ class JourneyWorker(QObject):
         self.destination = destination
         self.preference  = preference
         self.modes       = modes
-        # Map GUI preference to optimization parameter
-        self.optimization = {'fastest': 'duration', 'cheapest': 'cost', 'fewest': 'fewest'}.get(preference, 'duration')
+        self.optimization = preference_to_optimization(preference)
 
     def run(self):
         try:
