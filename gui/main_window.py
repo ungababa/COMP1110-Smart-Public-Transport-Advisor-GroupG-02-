@@ -17,7 +17,7 @@ from .results_table import ResultsTable
 # ── Background search worker ──────────────────────────────────────────────────
 
 class JourneyWorker(QObject):
-    """Runs the BFS journey search on a background thread so the UI never freezes."""
+    """Runs the A* journey search on a background thread so the UI never freezes."""
 
     finished = pyqtSignal(list)
     error    = pyqtSignal(str)
@@ -30,12 +30,15 @@ class JourneyWorker(QObject):
         self.destination = destination
         self.preference  = preference
         self.modes       = modes
+        # Map GUI preference to optimization parameter
+        self.optimization = {'fastest': 'duration', 'cheapest': 'cost', 'fewest': 'fewest'}.get(preference, 'duration')
 
     def run(self):
         try:
             from main import generate_journeys, rank_journeys, filter_journeys_by_transport
             journeys = generate_journeys(
-                self.network, self.fare_lookup, self.origin, self.destination
+                self.network, self.fare_lookup, self.origin, self.destination,
+                optimization=self.optimization
             )
             if self.modes:
                 journeys = filter_journeys_by_transport(journeys, set(self.modes))
