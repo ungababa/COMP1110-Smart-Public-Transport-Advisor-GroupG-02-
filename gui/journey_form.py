@@ -17,7 +17,6 @@ MODES = [
     ("MTR",             "🚇 MTR",             "#89b4fa", "#1a2035"),
     ("Bus",             "🚌 Bus",             "#a6e3a1", "#1a2a1a"),
     ("Light Rail",      "🚊 Light Rail",      "#fab387", "#2a1e14"),
-    ("Walk",            "🚶 Walk",            "#a6adc8", "#1e2028"),
     ("Airport Express", "✈️ Airport Exp.",    "#cba6f7", "#231a2e"),
 ]
 
@@ -147,8 +146,8 @@ class JourneyForm(QWidget):
         layout.addWidget(self._cap_label("TRANSPORT MODES"))
         layout.addSpacing(8)
 
-        # 2-per-row grid, last row left-aligned
-        mode_rows = [MODES[0:2], MODES[2:4], MODES[4:5]]
+        # 2-per-row grid
+        mode_rows = [MODES[0:2], MODES[2:4]]
         for row_modes in mode_rows:
             row = QHBoxLayout()
             row.setSpacing(6)
@@ -162,8 +161,6 @@ class JourneyForm(QWidget):
                 )
                 self._mode_btns[key] = (btn, color, dark_bg)
                 row.addWidget(btn)
-            if len(row_modes) == 1:
-                row.addStretch()
             layout.addLayout(row)
             layout.addSpacing(5)
 

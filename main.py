@@ -80,7 +80,7 @@ def estimate_cost(network: TransportNetwork, current_stop: str, destination: str
             # Assume max speed ~50 km/h for transit = 833 m/min
             return straight_line_dist / 833
         elif optimization == 'cost':
-            # Minimum possible cost is 0 (walking)
+            # Minimum possible cost is 0
             return 0
         else:  # fewest
             # Assume at least 1 segment per ~500m or so

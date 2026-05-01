@@ -491,39 +491,12 @@ def load_network_from_bus() -> Tuple['TransportNetwork', Dict[Tuple[str, str], f
             network.add_segment(reverse_segment)
             segments_added += 1
 
-    # Walking segments between nearby bus stops
-    walking_segments = 0
-    max_walking_per_stop = 5
-    walking_per_stop = {}
-
-    for stop1, (x1, y1) in stop_coords.items():
-        distances = []
-        for stop2, (x2, y2) in stop_coords.items():
-            if stop1 != stop2:
-                dist = haversine_distance(x1, y1, x2, y2)
-                distances.append((dist, stop2))
-        distances.sort()
-        added = 0
-        for dist, stop2 in distances:
-            if added >= max_walking_per_stop:
-                break
-            if dist < 300:  # within 300 meters
-                duration = max(1, int(dist / 84))
-                network.add_segment(Segment(stop1, stop2, duration, 0.0, mode='Walk'))
-                network.add_segment(Segment(stop2, stop1, duration, 0.0, mode='Walk'))
-                walking_segments += 2
-                added += 1
-                walking_per_stop[stop2] = walking_per_stop.get(stop2, 0) + 1
-            else:
-                break
-
     # Store coords in network for A* heuristic
     for stop_name, (lat, lon) in stop_coords.items():
         network.set_stop_coords(stop_name, lat, lon)
 
     warnings.append(
-        f"Loaded bus: {len(stop_coords)} bus stops, {segments_added} bus segments, "
-        f"{walking_segments} walking segments"
+        f"Loaded bus: {len(stop_coords)} bus stops, {segments_added} bus segments"
     )
     return network, {}, warnings
 
