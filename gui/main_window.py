@@ -1,12 +1,11 @@
 """
-Main GUI window for Smart Public Transport Advisor — Improved
+Main GUI window for Smart Public Transport Advisor
 """
 
 import sys
 from PyQt6.QtWidgets import (
-    QApplication, QMainWindow, QWidget,
-    QVBoxLayout, QHBoxLayout,
-    QLabel, QStatusBar, QSplitter,
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QLabel, QStatusBar, QSplitter
 )
 from PyQt6.QtCore import Qt, QThread, QObject, pyqtSignal
 
@@ -15,9 +14,9 @@ from .journey_form import JourneyForm
 from .results_table import ResultsTable
 
 
-# ── Background worker ─────────────────────────────────────────────────────────
+# ── Background search worker ──────────────────────────────────────────────────
 
-class _JourneyWorker(QObject):
+class JourneyWorker(QObject):
     """Runs the BFS journey search on a background thread so the UI never freezes."""
 
     finished = pyqtSignal(list)
@@ -36,15 +35,14 @@ class _JourneyWorker(QObject):
         try:
             from main import generate_journeys, rank_journeys, filter_journeys_by_transport
             journeys = generate_journeys(
-                self.network, self.fare_lookup,
-                self.origin, self.destination,
+                self.network, self.fare_lookup, self.origin, self.destination
             )
             if self.modes:
                 journeys = filter_journeys_by_transport(journeys, set(self.modes))
             journeys = rank_journeys(journeys, self.preference)[:10]
             self.finished.emit(journeys)
-        except Exception as exc:
-            self.error.emit(str(exc))
+        except Exception as e:
+            self.error.emit(str(e))
 
 
 # ── Main window ───────────────────────────────────────────────────────────────
@@ -60,9 +58,7 @@ class MainWindow(QMainWindow):
         self._thread        = None
         self._worker        = None
         self._setup_ui()
-        self._apply_dark_theme()
-
-    # ── UI construction ───────────────────────────────────────────────────────
+        self._apply_theme()
 
     def _setup_ui(self):
         self.setWindowTitle("Smart Public Transport Advisor")
@@ -74,13 +70,13 @@ class MainWindow(QMainWindow):
         root_layout.setContentsMargins(6, 6, 6, 6)
         root_layout.setSpacing(6)
 
-        # ── Left: Journey Form ────────────────────────────────────────────────
+        # ── Left panel: Journey Form ──────────────────────────────────────────
         self.form = JourneyForm(self.network.all_stops)
         self.form.populate_stops(self.network.all_stops)
         self.form.setFixedWidth(300)
         self.form.searchRequested.connect(self._on_search_requested)
 
-        # ── Right: vertical splitter (map on top, results table below) ────────
+        # ── Right side: map on top, results table below ───────────────────────
         right_splitter = QSplitter(Qt.Orientation.Vertical)
 
         self.map_widget = HKMapWidget()
@@ -105,39 +101,34 @@ class MainWindow(QMainWindow):
         # ── Status bar ────────────────────────────────────────────────────────
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
-
-        stops   = len(self.network.all_stops)
-        segs    = self.network.get_num_segments()
+        stops = len(self.network.all_stops)
+        segs  = self.network.get_num_segments()
         self.status_bar.showMessage(
             f"Network loaded  ·  {stops} stops  ·  {segs} segments  ·  "
-            "Enter an origin & destination, then click Find Journeys"
+            "Enter origin & destination then click Find Journeys"
         )
 
         self._searching_label = QLabel("  🔍 Searching…")
         self._searching_label.setVisible(False)
         self.status_bar.addPermanentWidget(self._searching_label)
 
-    # ── Signals & slots ───────────────────────────────────────────────────────
+    # ── Slots ─────────────────────────────────────────────────────────────────
 
     def _on_station_clicked(self, station_name: str):
-        """
-        When the user clicks a dot on the map, fill origin first, then
-        destination if origin is already set.
-        """
+        """Fill origin first, then destination, when user clicks a dot on the map."""
         origin = self.form.origin_combo.currentText().strip()
         dest   = self.form.dest_combo.currentText().strip()
-
         if not origin:
-            self.form.set_origin(station_name)
-            self.status_bar.showMessage(f"Origin set to: {station_name}")
+            self.form.origin_combo.setEditText(station_name)
+            self.status_bar.showMessage(f"Origin set: {station_name}")
         elif not dest or dest == origin:
-            self.form.set_destination(station_name)
-            self.status_bar.showMessage(f"Destination set to: {station_name}")
+            self.form.dest_combo.setEditText(station_name)
+            self.status_bar.showMessage(f"Destination set: {station_name}")
         else:
-            # Both already set — re-set origin (start fresh cycle)
-            self.form.set_origin(station_name)
-            self.form.set_destination("")
-            self.status_bar.showMessage(f"Origin reset to: {station_name}  ·  Now pick a destination")
+            # Both filled — restart the cycle
+            self.form.origin_combo.setEditText(station_name)
+            self.form.dest_combo.setEditText("")
+            self.status_bar.showMessage(f"Origin reset: {station_name}  ·  Now pick a destination")
 
     def _on_search_requested(self, params: dict):
         origin      = params["origin"]
@@ -145,43 +136,41 @@ class MainWindow(QMainWindow):
         preference  = params["preference"]
         modes       = params["modes"]
 
-        # ── Validate inputs ───────────────────────────────────────────────────
         if not origin:
-            self._set_status("Please enter an origin stop.", error=True)
+            self.status_bar.showMessage("Please enter an origin stop.")
             return
         if not destination:
-            self._set_status("Please enter a destination stop.", error=True)
+            self.status_bar.showMessage("Please enter a destination stop.")
             return
         if origin not in self.network.all_stops:
-            self._set_status(f"Origin '{origin}' not found in the network.", error=True)
+            self.status_bar.showMessage(f"Origin '{origin}' not found in the network.")
             return
         if destination not in self.network.all_stops:
-            self._set_status(f"Destination '{destination}' not found in the network.", error=True)
+            self.status_bar.showMessage(f"Destination '{destination}' not found in the network.")
             return
         if origin == destination:
-            self._set_status("Origin and destination must be different.", error=True)
+            self.status_bar.showMessage("Origin and destination must be different.")
             return
 
-        # ── Prepare UI for search ─────────────────────────────────────────────
+        # Prepare UI
         self.form.search_btn.setEnabled(False)
         self._searching_label.setVisible(True)
         self.results_table.clear()
         self.map_widget.clear_highlight()
-        self._set_status(
-            f"Searching {preference}  route:  {origin}  →  {destination} …"
+        self.status_bar.showMessage(
+            f"Searching {preference} route:  {origin}  →  {destination}…"
         )
 
-        # ── Kick off background thread ────────────────────────────────────────
+        # Kick off background thread
         self._thread = QThread()
-        self._worker = _JourneyWorker(
+        self._worker = JourneyWorker(
             self.network, self.fare_lookup,
-            origin, destination, preference, modes,
+            origin, destination, preference, modes
         )
         self._worker.moveToThread(self._thread)
         self._thread.started.connect(self._worker.run)
         self._worker.finished.connect(self._on_search_finished)
         self._worker.error.connect(self._on_search_error)
-        # Clean up thread after it's done
         self._worker.finished.connect(self._thread.quit)
         self._worker.error.connect(self._thread.quit)
         self._thread.finished.connect(self._thread.deleteLater)
@@ -193,47 +182,38 @@ class MainWindow(QMainWindow):
         self.found_journeys = journeys
 
         if not journeys:
-            self._set_status("No journeys found for this query — try relaxing the transport mode filters.")
+            self.status_bar.showMessage(
+                "No journeys found — try relaxing the transport mode filters."
+            )
             return
 
         self.results_table.set_journeys(journeys)
-        # Auto-select and show the first (best) journey
-        self._on_journey_selected(0)
-        self._set_status(
-            f"Found {len(journeys)} journey(s)  ·  "
-            "Click a row in the table below to highlight it on the map"
+        self._on_journey_selected(0)  # auto-highlight the best journey
+        self.status_bar.showMessage(
+            f"Found {len(journeys)} journey(s)  ·  Click a row in the table to highlight it on the map"
         )
 
     def _on_search_error(self, msg: str):
         self.form.search_btn.setEnabled(True)
         self._searching_label.setVisible(False)
-        self._set_status(f"Search error: {msg}", error=True)
+        self.status_bar.showMessage(f"Search error: {msg}")
 
     def _on_journey_selected(self, index: int):
         if 0 <= index < len(self.found_journeys):
             self.map_widget.highlight_journey(self.found_journeys[index])
             self.results_table.table.selectRow(index)
-            self.results_table._show_detail(index)
+            self.results_table._show_details(index)
 
-    # ── Helpers ───────────────────────────────────────────────────────────────
+    # ── Theme ─────────────────────────────────────────────────────────────────
 
-    def _set_status(self, msg: str, error: bool = False):
-        self.status_bar.showMessage(msg)
-        color = "#f38ba8" if error else "#a6adc8"
-        self.status_bar.setStyleSheet(f"color: {color};")
-
-    # ── Styling ───────────────────────────────────────────────────────────────
-
-    def _apply_dark_theme(self):
+    def _apply_theme(self):
         self.setStyleSheet("""
             QMainWindow, QWidget {
                 background-color: #1e1e2e;
                 color: #cdd6f4;
-                font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+                font-family: "Segoe UI", Arial, sans-serif;
                 font-size: 13px;
             }
-
-            /* ── Buttons ── */
             QPushButton {
                 background-color: #89b4fa;
                 color: #1e1e2e;
@@ -244,20 +224,13 @@ class MainWindow(QMainWindow):
             }
             QPushButton:hover   { background-color: #b4befe; }
             QPushButton:pressed { background-color: #74c7ec; }
-            QPushButton:disabled {
-                background-color: #45475a;
-                color: #6c7086;
-            }
-
-            /* ── Inputs ── */
+            QPushButton:disabled { background-color: #45475a; color: #6c7086; }
             QLineEdit, QComboBox {
                 background-color: #313244;
                 border: 2px solid #45475a;
                 border-radius: 6px;
                 padding: 5px 10px;
                 color: #cdd6f4;
-                selection-background-color: #89b4fa;
-                selection-color: #1e1e2e;
             }
             QLineEdit:focus, QComboBox:focus { border-color: #89b4fa; }
             QComboBox::drop-down { border: none; }
@@ -267,8 +240,6 @@ class MainWindow(QMainWindow):
                 selection-background-color: #89b4fa;
                 selection-color: #1e1e2e;
             }
-
-            /* ── Group boxes ── */
             QGroupBox {
                 border: 1px solid #45475a;
                 border-radius: 6px;
@@ -281,8 +252,6 @@ class MainWindow(QMainWindow):
                 left: 10px;
                 font-weight: bold;
             }
-
-            /* ── Check boxes ── */
             QCheckBox { spacing: 8px; }
             QCheckBox::indicator {
                 width: 16px; height: 16px;
@@ -294,14 +263,11 @@ class MainWindow(QMainWindow):
                 background-color: #89b4fa;
                 border-color: #89b4fa;
             }
-
-            /* ── Table ── */
             QTableWidget {
                 background-color: #181825;
                 alternate-background-color: #1e1e2e;
                 gridline-color: #313244;
                 border: none;
-                border-radius: 6px;
             }
             QTableWidget::item:selected {
                 background-color: #89b4fa;
@@ -314,33 +280,18 @@ class MainWindow(QMainWindow):
                 border: none;
                 font-weight: bold;
             }
-
-            /* ── Splitters ── */
             QSplitter::handle { background-color: #45475a; }
-
-            /* ── Scroll bars ── */
-            QScrollBar:vertical {
-                background: #181825; width: 10px; margin: 0;
-            }
-            QScrollBar::handle:vertical {
+            QScrollBar:vertical   { background: #181825; width: 10px; }
+            QScrollBar:horizontal { background: #181825; height: 10px; }
+            QScrollBar::handle:vertical, QScrollBar::handle:horizontal {
                 background: #45475a; border-radius: 5px; min-height: 20px;
             }
-            QScrollBar:horizontal {
-                background: #181825; height: 10px; margin: 0;
-            }
-            QScrollBar::handle:horizontal {
-                background: #45475a; border-radius: 5px; min-width: 20px;
-            }
             QScrollBar::add-line, QScrollBar::sub-line { background: none; }
-
-            /* ── Status bar ── */
             QStatusBar {
                 background-color: #181825;
                 color: #a6adc8;
                 border-top: 1px solid #313244;
             }
-
-            /* ── Tooltips ── */
             QToolTip {
                 background-color: #313244;
                 color: #cdd6f4;
@@ -354,6 +305,7 @@ class MainWindow(QMainWindow):
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def run_gui(network, fare_lookup):
+    """Run the GUI application."""
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
     window = MainWindow(network, fare_lookup)
