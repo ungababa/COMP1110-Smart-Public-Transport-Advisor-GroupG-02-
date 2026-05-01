@@ -298,10 +298,12 @@ class MainWindow(QMainWindow):
         """)
 
 
-# ── Entry point ───────────────────────────────────────────────────────────────
+
+# ── Entry point ──────────────────────────────────────────────────────────────
 
 def run_gui(network, fare_lookup):
     """Run the GUI application."""
+    import sys
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
     window = MainWindow(network, fare_lookup)
