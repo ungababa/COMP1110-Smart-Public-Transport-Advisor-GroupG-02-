@@ -14,6 +14,8 @@ import sys
 import math
 import xml.etree.ElementTree as ET
 from typing import List, Dict, Tuple, Optional
+import csv
+from collections import deque
 
 
 def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -150,14 +152,14 @@ def load_network_from_mtr() -> Tuple[TransportNetwork, Dict[Tuple[str, str], flo
     Returns:
         Tuple of (TransportNetwork object, fare_lookup dict, list of warning/error messages)
     """
-    import csv
+    # csv imported at module level
 
     network = TransportNetwork()
     warnings = []
 
     # Files to try loading
-    stations_file = 'mtr/mtr_lines_and_stations.csv'
-    fares_file = 'mtr/mtr_lines_fares.csv'
+    stations_file = 'data/mtr/mtr_lines_and_stations.csv'
+    fares_file = 'data/mtr/mtr_lines_fares.csv'
 
     # Check if files exist
     if not os.path.exists(stations_file):
@@ -199,7 +201,7 @@ def load_network_from_mtr() -> Tuple[TransportNetwork, Dict[Tuple[str, str], flo
                 except ValueError:
                     pass
     except Exception as e:
-        return load_network('network.csv'), [f"Warning: Could not read {stations_file}: {str(e)}"]
+        return load_network('data/network.csv'), [f"Warning: Could not read {stations_file}: {str(e)}"]
 
     # Build fare lookup from fares file
     # Key: (source, dest), Value: standard fare
@@ -221,7 +223,7 @@ def load_network_from_mtr() -> Tuple[TransportNetwork, Dict[Tuple[str, str], flo
         warnings.append(f"Warning: Could not read fares file: {str(e)}")
 
     # Also load airport express fares
-    airport_fares_file = 'airport_express_fares.csv'
+    airport_fares_file = 'data/airport_express_fares.csv'
     try:
         with open(airport_fares_file, 'r', encoding='utf-8-sig') as f:
             reader = csv.DictReader(f)
@@ -288,8 +290,8 @@ def load_network_from_mtr() -> Tuple[TransportNetwork, Dict[Tuple[str, str], flo
     # We already have them from the line sequences, but let's ensure connectivity
 
     if segments_added == 0:
-        fallback_network, fallback_warnings = load_network('network.csv')
-        return fallback_network, {}, ["Warning: No segments created from MTR data, using network.csv"] + fallback_warnings + fallback_warnings
+        fallback_network, fallback_warnings = load_network('data/network.csv')
+        return fallback_network, {}, ["Warning: No segments created from MTR data, using data/network.csv"] + fallback_warnings + fallback_warnings
 
     warnings.append(f"Loaded {len(network.all_stops)} stops and {segments_added} segments from MTR data")
 
@@ -396,13 +398,13 @@ def load_network_from_light_rail() -> Tuple[TransportNetwork, Dict[Tuple[str, st
     Returns:
         Tuple of (TransportNetwork object, fare_lookup dict, list of warning/error messages)
     """
-    import csv
+    # csv imported at module level
 
     network = TransportNetwork()
     warnings = []
 
-    routes_file = 'mtr/light_rail_routes_and_stops.csv'
-    fares_file = 'mtr/light_rail_fares.csv'
+    routes_file = 'data/mtr/light_rail_routes_and_stops.csv'
+    fares_file = 'data/mtr/light_rail_fares.csv'
 
     if not os.path.exists(routes_file):
         return network, [f"Warning: {routes_file} not found"]
@@ -497,15 +499,15 @@ def load_network_from_bus() -> Tuple[TransportNetwork, Dict[Tuple[str, str], flo
     Returns:
         Tuple of (TransportNetwork object, list of warning/error messages)
     """
-    import csv
+    # csv imported at module level
 
     network = TransportNetwork()
     warnings = []
 
-    routes_file = 'bus/ROUTE_BUS.xml'
-    stops_file = 'bus/RSTOP_BUS.xml'
-    coords_file = 'bus/STOP_BUS.xml'
-    fares_file = 'bus/FARE_BUS.xml'
+    routes_file = 'data/bus/ROUTE_BUS.xml'
+    stops_file = 'data/bus/RSTOP_BUS.xml'
+    coords_file = 'data/bus/STOP_BUS.xml'
+    fares_file = 'data/bus/FARE_BUS.xml'
 
     if not os.path.exists(stops_file):
         return network, [f"Warning: {stops_file} not found"]
@@ -639,7 +641,7 @@ def load_network_from_airport_express() -> Tuple[TransportNetwork, List[str]]:
     Returns:
         Tuple of (TransportNetwork object, list of warning/error messages)
     """
-    import csv
+    # csv imported at module level
 
     network = TransportNetwork()
     warnings = []
@@ -762,7 +764,7 @@ def generate_journeys(network: TransportNetwork, fare_lookup: Dict[Tuple[str, st
     Returns:
         List of Journey objects found (up to max_journeys)
     """
-    from collections import deque
+    # deque imported at module level
 
     if origin not in network.all_stops or destination not in network.all_stops:
         return []
@@ -869,7 +871,9 @@ def get_transport_preferences(network: TransportNetwork) -> Optional[set]:
     print("Enter choices as numbers separated by commas (e.g. 1,3). Press Enter for Any.")
 
     while True:
-        choice = input("Enter choice(s): ").strip()
+        print("Enter choice(s): ", end="", flush=True)
+        sys.stdout.flush()
+        choice = input().strip()
         if choice == "":
             return None
 
@@ -968,7 +972,9 @@ def list_stops(network: TransportNetwork) -> None:
         return
 
     print(f"\nTotal stops: {len(stops)}")
-    query = input("Enter stop name to search (or 'all' to list all, 'summary' for stats): ").strip()
+    print("Enter stop name to search (or 'all' to list all, 'summary' for stats): ", end="", flush=True)
+    sys.stdout.flush()
+    query = input().strip()
 
     if query.lower() == 'summary':
         show_summary(network)
@@ -1077,208 +1083,32 @@ def validate_stops(network: TransportNetwork, origin: str, destination: str) -> 
     return True, "", origin_norm, dest_norm
 
 
-def get_stop_suggestions(network: TransportNetwork, query: str, limit: int = 5) -> List[str]:
-    """Get stop name suggestions matching the query (case-insensitive)."""
-    if not query or not network.all_stops:
-        return []
-
-    query_lower = query.lower()
-    matches = []
-
-    for stop in network.all_stops:
-        stop_lower = stop.lower()
-        # Prefix match gets priority
-        if stop_lower.startswith(query_lower):
-            matches.append((0, stop))
-        elif query_lower in stop_lower:
-            matches.append((1, stop))
-
-    # Sort by priority (prefix first), then alphabetically
-    matches.sort(key=lambda x: (x[0], x[1].lower()))
-    return [m[1] for m in matches[:limit]]
 
 
-def _rl_complete(text: str, state: int, stops: List[str]) -> str:
-    """Readline completion - tries to match ALL words user typed."""
-    MIN_CHARS = 2
-
-    if len(text) < MIN_CHARS:
-        return None
-
-    # Try to get full line buffer from both readline and pyreadline3
-    full_line = text
-    try:
-        import readline
-        full_line = readline.get_line_buffer() or text
-    except Exception:
-        pass
-
-    # If still just partial word, try pyreadline3 way
-    if full_line == text or len(full_line.split()) <= 1:
-        try:
-            import pyreadline3.console as console
-            import pyreadline3.lineeditor as lineeditor
-            # Try to get current line from pyreadline3
-            try:
-                from pyreadline3 import Readline
-                rl = Readline()
-                full_line = rl.get_line_buffer() or text
-            except:
-                pass
-        except:
-            pass
-
-    search_lower = full_line.lower()
-    words = search_lower.split()
-    if not words:
-        return None
-
-    # ALL words must be in stop name
-    matches = []
-    for stop in stops:
-        stop_lower = stop.lower()
-        if all(word in stop_lower for word in words):
-            matches.append(stop)
-
-    if state < len(matches):
-        return matches[state]
-    return None
-
-
-def _key_readline(prompt: str, stops: List[str]) -> str:
-    """Custom input with inline autocomplete using TAB."""
-    try:
-        import msvcrt
-    except ImportError:
-        # Not Windows - use regular input
-        return input(prompt)
-
-    # Windows implementation with TAB detection
-    import msvcrt
-
-    MIN_CHARS = 2
-    cursor_pos = 0
-    buffer = ""
-
-    print(prompt, end="", flush=True)
-
-    while True:
-        key = msvcrt.getch()
-
-        # TAB key
-        if key == b'\t':
-            # Check if we have enough characters
-            if len(buffer) >= MIN_CHARS:
-                # Try to autocomplete with ALL words
-                normalized = " ".join(buffer.lower().split())
-                words = normalized.split()
-
-                matches = []
-                for stop in stops:
-                    stop_lower = stop.lower()
-                    if all(w in stop_lower for w in words):
-                        matches.append(stop)
-
-                if matches:
-                    # Complete to first match
-                    buffer = matches[0]
-                    cursor_pos = len(buffer)
-                    # Clear and reprint
-                    print("\r" + " " * 80 + "\r" + prompt + buffer, end="", flush=True)
-            continue
-
-        # Enter key
-        elif key == b'\r' or key == b'\n':
-            print()
-            return buffer
-
-        # Backspace
-        elif key == b'\x08':
-            if cursor_pos > 0:
-                buffer = buffer[:cursor_pos - 1] + buffer[cursor_pos:]
-                cursor_pos -= 1
-                print("\b \b", end="", flush=True)
-            continue
-
-        # Regular character (ASCII)
-        elif len(key) == 1 and 32 <= ord(key) <= 126:
-            char = key.decode('utf-8', errors='ignore')
-            buffer = buffer[:cursor_pos] + char + buffer[cursor_pos:]
-            cursor_pos += 1
-            print(key.decode('utf-8'), end="", flush=True)
-            continue
-
-
-def _get_full_line() -> str:
-    """Get the full line buffer from readline/pyreadline3."""
-    try:
-        import readline
-        return readline.get_line_buffer() or ""
-    except ImportError:
-        pass
-    except Exception:
-        pass
-
-    try:
-        from pyreadline3 import Readline
-        return Readline().get_line_buffer()
-    except Exception:
-        pass
-
-    return ""
-
-
-def _rl_complete(text: str, state: int, stops: List[str]) -> str:
-    """Readline completion matching ALL typed words."""
-    MIN_CHARS = 2
-    if len(text) < MIN_CHARS:
-        return None
-
-    # Get full line
-    full_line = _get_full_line() or text
-
-    words = full_line.lower().split()
-    if not words:
-        return None
-
-    # All words must be in stop
-    matches = [s for s in stops if all(w in s.lower() for w in words)]
-
-    if state < len(matches):
-        return matches[state]
-    return None
 
 
 def prompt_stop_input(prompt_msg: str, network: TransportNetwork) -> str:
-    """Prompt for stop input with TAB autocomplete."""
+    """Prompt for stop input with validation."""
     stops = sorted(network.all_stops, key=str.lower)
 
-    # Set up TAB completion
-    try:
-        import readline
-        readline.set_completer(lambda t, s: _rl_complete(t, s, stops))
-        readline.parse_and_bind("tab: complete")
-    except ImportError:
-        try:
-            import pyreadline3 as rl
-            rl.set_completer(lambda t, s: _rl_complete(t, s, stops))
-        except ImportError:
-            pass
-
     while True:
-        user_input = input(prompt_msg).strip()
+        # Print prompt explicitly with flush to avoid buffering
+        print(prompt_msg, end="", flush=True)
+        sys.stdout.flush()  # Force output to terminal
+        user_input = input().strip()
+        
         if not user_input:
             print("Please enter a stop name.")
             continue
 
         normalized = " ".join(user_input.lower().split())
 
-        # Exact
+        # Exact match
         exact = next((s for s in stops if s.lower() == normalized), None)
         if exact:
             return exact
 
-        # All words match
+        # Partial word match (all words must be in stop name)
         words = normalized.split()
         if words:
             matches = [s for s in stops if all(w in s.lower() for w in words)]
@@ -1290,58 +1120,6 @@ def prompt_stop_input(prompt_msg: str, network: TransportNetwork) -> str:
                 continue
 
         print(f"Error: No stop found matching '{user_input}'")
-
-
-def _rl_complete(text: str, state: int, stops: List[str]) -> str:
-    """Readline completion - matches ALL words user typed."""
-    MIN_CHARS = 2
-
-    if len(text) < MIN_CHARS:
-        return None
-
-    # Get full line buffer
-    full_line = text
-
-    # Try standard readline
-    try:
-        import readline
-        buf = readline.get_line_buffer()
-        if buf:
-            full_line = buf
-    except ImportError:
-        pass
-
-    # Try pyreadline3 specific way
-    if full_line == text:
-        try:
-            import pyreadline3 as rl
-            # Try to get instance and its buffer
-            inst = rl.GetReadline()
-            if hasattr(inst, 'line_buffer'):
-                full_line = inst.line_buffer
-            elif hasattr(inst, 'get_line_buffer'):
-                full_line = inst.get_line_buffer()
-        except:
-            pass
-
-    if not full_line:
-        full_line = text
-
-    search_lower = full_line.lower()
-    words = search_lower.split()
-    if not words:
-        return None
-
-    # ALL words must be in stop name
-    matches = []
-    for stop in stops:
-        stop_lower = stop.lower()
-        if all(word in stop_lower for word in words):
-            matches.append(stop)
-
-    if state < len(matches):
-        return matches[state]
-    return None
 
 
 def _matches_all_words(text: str, stops: List[str]) -> List[str]:
@@ -1370,7 +1148,9 @@ def get_preference() -> str:
         print("  1. Fastest (shortest total time)")
         print("  2. Cheapest (lowest total cost)")
         print("  3. Fewest segments (simplest route)")
-        choice = input("Enter choice (1-3): ").strip()
+        print("Enter choice (1-3): ", end="", flush=True)
+        sys.stdout.flush()
+        choice = input().strip()
 
         if choice == '1':
             return 'fastest'
@@ -1421,7 +1201,9 @@ def query_journeys(network: TransportNetwork, fare_lookup: Dict[Tuple[str, str],
 
 def load_network_interactive() -> Tuple[Optional[TransportNetwork], Dict[Tuple[str, str], float], List[str]]:
     """Prompts user for network file path and loads it."""
-    filename = input("\nEnter network file path: ").strip()
+    print("\nEnter network file path: ", end="", flush=True)
+    sys.stdout.flush()
+    filename = input().strip()
 
     if not filename:
         print("Error: No filename provided.")
@@ -1441,8 +1223,8 @@ def main():
     network, fare_lookup, warnings = load_network_all()
 
     if not network.all_stops:
-        print("Loading default network from 'network.csv'...")
-        network, fare_lookup, warnings = load_network("network.csv")
+        print("Loading default network from 'data/network.csv'...")
+        network, fare_lookup, warnings = load_network("data/network.csv")
 
     for warning in warnings:
         print(warning)
@@ -1454,7 +1236,9 @@ def main():
     # Main menu loop
     while True:
         display_menu()
-        choice = input("\nEnter choice (1-5): ").strip()
+        print("\nEnter choice (1-5): ", end="", flush=True)
+        sys.stdout.flush()
+        choice = input().strip()
 
         if choice == '1':
             list_stops(network)
@@ -1492,8 +1276,8 @@ if __name__ == "__main__":
         network, fare_lookup, warnings = load_network_all()
 
         if not network.all_stops:
-            print("Loading default network from 'network.csv'...")
-            network, fare_lookup, warnings = load_network("network.csv")
+            print("Loading default network from 'data/network.csv'...")
+            network, fare_lookup, warnings = load_network("data/network.csv")
 
         for warning in warnings:
             print(warning)

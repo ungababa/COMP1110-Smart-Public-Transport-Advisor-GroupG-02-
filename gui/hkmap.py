@@ -167,9 +167,9 @@ def load_bus_stops():
     
     # Load coordinates from STOP_BUS.xml by stop_id
     xml_paths = [
-        Path('bus/STOP_BUS.xml'),
-        Path('gui/../bus/STOP_BUS.xml'),
-        Path(__file__).parent.parent / 'bus' / 'STOP_BUS.xml',
+        Path('data/bus/STOP_BUS.xml'),
+        Path('gui/../data/bus/STOP_BUS.xml'),
+        Path(__file__).parent.parent / 'data' / 'bus' / 'STOP_BUS.xml',
     ]
     
     xml_file = None
@@ -205,9 +205,9 @@ def load_bus_stops():
     
     # Load stop names from RSTOP_BUS.xml and map to coordinates
     xml_paths = [
-        Path('bus/RSTOP_BUS.xml'),
-        Path('gui/../bus/RSTOP_BUS.xml'),
-        Path(__file__).parent.parent / 'bus' / 'RSTOP_BUS.xml',
+        Path('data/bus/RSTOP_BUS.xml'),
+        Path('gui/../data/bus/RSTOP_BUS.xml'),
+        Path(__file__).parent.parent / 'data' / 'bus' / 'RSTOP_BUS.xml',
     ]
     
     xml_file = None
@@ -260,9 +260,9 @@ def identify_important_bus_stations(stop_id_coords):
     
     # Try to find the XML file in bus directory
     xml_paths = [
-        Path('bus/RSTOP_BUS.xml'),
-        Path('gui/../bus/RSTOP_BUS.xml'),
-        Path(__file__).parent.parent / 'bus' / 'RSTOP_BUS.xml',
+        Path('data/bus/RSTOP_BUS.xml'),
+        Path('gui/../data/bus/RSTOP_BUS.xml'),
+        Path(__file__).parent.parent / 'data' / 'bus' / 'RSTOP_BUS.xml',
     ]
     
     xml_file = None
@@ -371,8 +371,17 @@ class HKMapWidget(QWidget):
 
     def _load_background(self):
         try:
-            if os.path.exists('Hong_Kong_Base_Map.png'):
-                pixmap = QPixmap('Hong_Kong_Base_Map.png')
+            img_paths = [
+                Path('data/Hong_Kong_Base_Map.png'),
+                Path(__file__).parent.parent / 'data' / 'Hong_Kong_Base_Map.png',
+            ]
+            img_file = None
+            for p in img_paths:
+                if p.exists():
+                    img_file = p
+                    break
+            if img_file:
+                pixmap = QPixmap(str(img_file))
                 self.bg_item = self.scene.addPixmap(pixmap)
                 self.bg_item.setZValue(-1)
         except Exception as e:
