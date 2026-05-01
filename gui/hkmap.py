@@ -3,13 +3,15 @@ Hong Kong Map Visualization Widget
 """
 
 import os
+import xml.etree.ElementTree as ET
+from pathlib import Path
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QGraphicsView,
     QGraphicsScene, QGraphicsEllipseItem, QGraphicsLineItem,
-    QPushButton, QHBoxLayout
+    QPushButton, QHBoxLayout, QGraphicsTextItem
 )
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QPen, QBrush, QColor, QPainter, QPixmap
+from PyQt6.QtGui import QPen, QBrush, QColor, QPainter, QPixmap, QFont
 
 
 # Color scheme for different transport modes
@@ -146,9 +148,154 @@ def map_range(lat, lon):
 
     Offset applied: +150 X (east), +200 Y (south) for visual alignment.
     """
-    x = (lon - MAP_WEST) / (MAP_EAST - MAP_WEST) * MAP_PIXEL_WIDTH + 85
-    y = (MAP_NORTH - lat) / (MAP_NORTH - MAP_SOUTH) * MAP_PIXEL_HEIGHT + 85
+    x = (lon - MAP_WEST) / (MAP_EAST - MAP_WEST) * MAP_PIXEL_WIDTH + 75
+    y = (MAP_NORTH - lat) / (MAP_NORTH - MAP_SOUTH) * MAP_PIXEL_HEIGHT + 75
     return x, y
+
+
+def load_bus_stops():
+    """Load bus stop coordinates from STOP_BUS.xml and RSTOP_BUS.xml.
+    
+    Returns:
+        Tuple: (stop_id_coords_dict, stop_name_coords_dict)
+        - stop_id_coords: stop_id -> (lat, lon)
+        - stop_name_coords: stop_name -> (lat, lon) for journeys
+    """
+    stop_id_coords = {}
+    stop_name_coords = {}
+    stop_id_to_names = {}  # stop_id -> set of stop_names
+    
+    # Load coordinates from STOP_BUS.xml by stop_id
+    xml_paths = [
+        Path('bus/STOP_BUS.xml'),
+        Path('gui/../bus/STOP_BUS.xml'),
+        Path(__file__).parent.parent / 'bus' / 'STOP_BUS.xml',
+    ]
+    
+    xml_file = None
+    for path in xml_paths:
+        if path.exists():
+            xml_file = path
+            break
+    
+    if xml_file:
+        try:
+            tree = ET.parse(xml_file)
+            root = tree.getroot()
+            
+            for stop_elem in root.findall('STOP'):
+                stop_id = stop_elem.findtext('STOP_ID')
+                lat_str = stop_elem.findtext('X')
+                lon_str = stop_elem.findtext('Y')
+                
+                if stop_id and lat_str and lon_str:
+                    try:
+                        lat = float(lat_str)
+                        lon = float(lon_str)
+                        stop_id_coords[stop_id] = (lat, lon)
+                    except ValueError:
+                        continue
+            
+            print(f"Loaded {len(stop_id_coords)} bus stops from STOP_BUS.xml")
+        
+        except Exception as e:
+            print(f"Error loading bus stops: {e}")
+    else:
+        print("Warning: STOP_BUS.xml not found.")
+    
+    # Load stop names from RSTOP_BUS.xml and map to coordinates
+    xml_paths = [
+        Path('bus/RSTOP_BUS.xml'),
+        Path('gui/../bus/RSTOP_BUS.xml'),
+        Path(__file__).parent.parent / 'bus' / 'RSTOP_BUS.xml',
+    ]
+    
+    xml_file = None
+    for path in xml_paths:
+        if path.exists():
+            xml_file = path
+            break
+    
+    if xml_file:
+        try:
+            tree = ET.parse(xml_file)
+            root = tree.getroot()
+            
+            for route_elem in root.findall('RSTOP'):
+                stop_id = route_elem.findtext('STOP_ID')
+                # Get English name (STOP_NAMEE)
+                stop_name = route_elem.findtext('STOP_NAMEE')
+                
+                if stop_id and stop_name and stop_id in stop_id_coords:
+                    if stop_id not in stop_id_to_names:
+                        stop_id_to_names[stop_id] = set()
+                    stop_id_to_names[stop_id].add(stop_name)
+                    # Map stop name to coordinates (only add if not already mapped)
+                    if stop_name not in stop_name_coords:
+                        stop_name_coords[stop_name] = stop_id_coords[stop_id]
+        
+        except Exception as e:
+            print(f"Error loading stop names: {e}")
+    else:
+        print("Warning: RSTOP_BUS.xml not found.")
+    
+    print(f"Loaded {len(stop_name_coords)} named bus stops for journey mapping")
+    return stop_id_coords, stop_name_coords
+
+
+def identify_important_bus_stations(stop_id_coords):
+    """Identify important bus stations based on route density.
+    
+    Analyzes RSTOP_BUS.xml to count how many routes pass through each stop.
+    Returns the top 300 busiest interchanges.
+    
+    Args:
+        stop_id_coords: Dictionary of stop_id -> (lat, lon)
+    
+    Returns:
+        Dict: stop_id -> route_count for top 300 important stops
+    """
+    important_stops = {}
+    stop_route_count = {}
+    
+    # Try to find the XML file in bus directory
+    xml_paths = [
+        Path('bus/RSTOP_BUS.xml'),
+        Path('gui/../bus/RSTOP_BUS.xml'),
+        Path(__file__).parent.parent / 'bus' / 'RSTOP_BUS.xml',
+    ]
+    
+    xml_file = None
+    for path in xml_paths:
+        if path.exists():
+            xml_file = path
+            break
+    
+    if not xml_file:
+        print("Warning: RSTOP_BUS.xml not found. All bus stops will be treated equally.")
+        return important_stops
+    
+    try:
+        tree = ET.parse(xml_file)
+        root = tree.getroot()
+        
+        # Count routes per stop
+        for route_elem in root.findall('RSTOP'):
+            stop_id = route_elem.findtext('STOP_ID')
+            if stop_id and stop_id in stop_id_coords:
+                stop_route_count[stop_id] = stop_route_count.get(stop_id, 0) + 1
+        
+        # Select top 300 stops by route count
+        MAX_IMPORTANT_STOPS = 300
+        sorted_stops = sorted(stop_route_count.items(), key=lambda x: x[1], reverse=True)
+        for stop_id, count in sorted_stops[:MAX_IMPORTANT_STOPS]:
+            important_stops[stop_id] = count
+    
+    except Exception as e:
+        print(f"Error identifying important bus stations: {e}")
+    
+    print(f"Identified {len(important_stops)} top important bus interchanges (top 300 by route density)")
+    return important_stops
 
 
 class HKMapWidget(QWidget):
@@ -161,6 +308,23 @@ class HKMapWidget(QWidget):
         self.network = None
         self.stop_positions = {}
         self.highlighted_path = []
+        
+        # Load bus stop data
+        self.bus_stops_by_id, self.bus_stops_by_name = load_bus_stops()
+        self.important_bus_stops = identify_important_bus_stations(self.bus_stops_by_id)
+        self.bus_stop_positions = {}  # stop_id -> (x, y) pixel coordinates
+        self.bus_stop_name_positions = {}  # stop_name -> (x, y) pixel coordinates
+        self.journey_bus_stops = set()  # stop_names in current journey
+        
+        # Pre-compute pixel coordinates for all bus stops
+        for stop_id, (lat, lon) in self.bus_stops_by_id.items():
+            x, y = map_range(lat, lon)
+            self.bus_stop_positions[stop_id] = (x, y)
+        
+        for stop_name, (lat, lon) in self.bus_stops_by_name.items():
+            x, y = map_range(lat, lon)
+            self.bus_stop_name_positions[stop_name] = (x, y)
+        
         self._setup_ui()
 
     def _setup_ui(self):
@@ -222,6 +386,11 @@ class HKMapWidget(QWidget):
         if not self.network:
             return
 
+        mtr_count = 0
+        important_bus_count = 0
+        self.journey_bus_stops.clear()
+
+        # Render MTR stations
         for stop in self.network.all_stops:
             if stop in STATION_COORDS:
                 lat, lon = STATION_COORDS[stop]
@@ -238,8 +407,25 @@ class HKMapWidget(QWidget):
                 ellipse.setPen(QPen(Qt.GlobalColor.white, 2))
                 ellipse.setZValue(1)
                 self.scene.addItem(ellipse)
+                mtr_count += 1
 
-        self.status_label.setText(f"Showing {len(self.stop_positions)} stations")
+        # Render important bus stops (always visible)
+        for stop_id in self.important_bus_stops.keys():
+            if stop_id in self.bus_stop_positions:
+                x, y = self.bus_stop_positions[stop_id]
+                
+                # Important bus stops: small blue dots
+                size = 8
+                ellipse = QGraphicsEllipseItem(x - size/2, y - size/2, size, size)
+                ellipse.setBrush(QBrush(QColor(0, 100, 200)))  # Blue
+                ellipse.setPen(QPen(Qt.GlobalColor.white, 1))
+                ellipse.setZValue(1)
+                self.scene.addItem(ellipse)
+                important_bus_count += 1
+
+        self.status_label.setText(
+            f"Showing {mtr_count} MTR stations + {important_bus_count} important bus interchanges"
+        )
 
     def highlight_journey(self, journey):
         if not journey:
@@ -249,24 +435,86 @@ class HKMapWidget(QWidget):
         self.highlighted_path = journey.segments
 
         prev_pos = None
+        journey_bus_stops_found = set()
+        all_journey_stops = {}  # stop_name -> position for labeling
+        
         for seg in journey.segments:
             from_pos = self.stop_positions.get(seg.from_stop)
             to_pos = self.stop_positions.get(seg.to_stop)
 
             if from_pos and to_pos:
+                # Both are MTR stations
                 line = QGraphicsLineItem(from_pos[0], from_pos[1], to_pos[0], to_pos[1])
                 line.setPen(QPen(QColor(255, 0, 0), 3))
                 line.setZValue(2)
                 self.scene.addItem(line)
+                all_journey_stops[seg.from_stop] = from_pos
+                all_journey_stops[seg.to_stop] = to_pos
                 prev_pos = to_pos
             elif from_pos:
+                # from_stop is MTR, to_stop is not
                 ellipse = QGraphicsEllipseItem(from_pos[0] - 6, from_pos[1] - 6, 12, 12)
                 ellipse.setBrush(QBrush(QColor(0, 200, 0)))
                 ellipse.setPen(QPen(Qt.GlobalColor.white, 2))
                 ellipse.setZValue(2)
                 self.scene.addItem(ellipse)
+                all_journey_stops[seg.from_stop] = from_pos
                 prev_pos = from_pos
+                
+                # Check if to_stop is a bus stop
+                if seg.to_stop in self.bus_stop_name_positions:
+                    to_pos = self.bus_stop_name_positions[seg.to_stop]
+                    journey_bus_stops_found.add(seg.to_stop)
+                    all_journey_stops[seg.to_stop] = to_pos
+            else:
+                # from_stop is not in MTR stations, check if it's a bus stop
+                from_pos = None
+                if seg.from_stop in self.bus_stop_name_positions:
+                    from_pos = self.bus_stop_name_positions[seg.from_stop]
+                    journey_bus_stops_found.add(seg.from_stop)
+                    all_journey_stops[seg.from_stop] = from_pos
+                
+                # to_stop is not in MTR stations, check if it's a bus stop
+                to_pos = None
+                if seg.to_stop in self.bus_stop_name_positions:
+                    to_pos = self.bus_stop_name_positions[seg.to_stop]
+                    journey_bus_stops_found.add(seg.to_stop)
+                    all_journey_stops[seg.to_stop] = to_pos
+                
+                # If both are bus stops, draw a line
+                if from_pos and to_pos:
+                    line = QGraphicsLineItem(from_pos[0], from_pos[1], to_pos[0], to_pos[1])
+                    line.setPen(QPen(QColor(255, 0, 0), 3))
+                    line.setZValue(2)
+                    self.scene.addItem(line)
+                    prev_pos = to_pos
 
+        # Render all stops in the journey with labels
+        font = QFont()
+        font.setPointSize(8)
+        
+        for stop_name, (x, y) in all_journey_stops.items():
+            if stop_name in STATION_COORDS:
+                # MTR station - already rendered, just add label
+                size = 6
+            else:
+                # Bus stop - render green dot
+                size = 6
+                ellipse = QGraphicsEllipseItem(x - size/2, y - size/2, size, size)
+                ellipse.setBrush(QBrush(QColor(0, 150, 50)))  # Green
+                ellipse.setPen(QPen(Qt.GlobalColor.white, 1))
+                ellipse.setZValue(2)
+                self.scene.addItem(ellipse)
+            
+            # Add station name label to the right of the point
+            text_item = QGraphicsTextItem(stop_name)
+            text_item.setFont(font)
+            text_item.setDefaultTextColor(QColor(0, 0, 0))
+            text_item.setPos(x + 10, y - 8)  # Position to the right and slightly up
+            text_item.setZValue(3)  # Above everything else
+            self.scene.addItem(text_item)
+
+        # Mark endpoint if needed
         if prev_pos:
             ellipse = QGraphicsEllipseItem(prev_pos[0] - 6, prev_pos[1] - 6, 12, 12)
             ellipse.setBrush(QBrush(QColor(255, 0, 0)))
@@ -274,7 +522,11 @@ class HKMapWidget(QWidget):
             ellipse.setZValue(2)
             self.scene.addItem(ellipse)
 
-        self.status_label.setText(f"Journey: {journey.origin} → {journey.destination} ({journey.num_segments} segments)")
+        bus_stop_count = len(journey_bus_stops_found)
+        self.status_label.setText(
+            f"Journey: {journey.origin} → {journey.destination} "
+            f"({journey.num_segments} segments, {bus_stop_count} bus stops)"
+        )
 
     def _zoom_in(self):
         self.view.scale(1.2, 1.2)
