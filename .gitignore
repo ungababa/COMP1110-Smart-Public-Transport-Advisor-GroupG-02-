@@ -1,4 +1,5 @@
 env
+.venv
 SPEC.md
 .claude/settings.local.json
 .gitignore
