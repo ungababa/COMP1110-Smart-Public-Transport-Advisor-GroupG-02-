@@ -26,6 +26,17 @@ def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> fl
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
     return R * c
 
+
+def preference_to_optimization(preference: str) -> str:
+    """Map a user preference to the A* optimization mode."""
+    if preference in {'duration', 'cost', 'fewest'}:
+        return preference
+    return {
+        'fastest': 'duration',
+        'cheapest': 'cost',
+        'fewest': 'fewest',
+    }.get(preference, 'duration')
+
 # =============================================================================
 # Import data structures and load functions from files.py
 # =============================================================================
@@ -113,6 +124,8 @@ def generate_journeys_astar(network: TransportNetwork, fare_lookup: Dict[Tuple[s
     """
     if origin not in network.all_stops or destination not in network.all_stops:
         return []
+
+    optimization = preference_to_optimization(optimization)
 
     journeys = []
     found_paths = set()
@@ -573,8 +586,7 @@ def query_journeys(network: TransportNetwork, fare_lookup: Dict[Tuple[str, str],
     preference = get_preference()
 
     # Map preference to optimization parameter
-    optimization_map = {'fastest': 'duration', 'cheapest': 'cost', 'fewest': 'fewest'}
-    optimization = optimization_map.get(preference, 'duration')
+    optimization = preference_to_optimization(preference)
 
     # Get transport medium preference (multi-select)
     transport_pref = get_transport_preferences(network)
