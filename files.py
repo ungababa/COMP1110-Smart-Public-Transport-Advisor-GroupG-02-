@@ -68,11 +68,13 @@ class TransportNetwork:
     Attributes:
         stops: Dictionary of stop name -> list of outbound segments
         all_stops: Set of all stop names
+        stop_coords: Dictionary of stop name -> (lat, lon) coordinates
     """
 
     def __init__(self):
         self.stops: Dict[str, List[Segment]] = {}
         self.all_stops: set = set()
+        self.stop_coords: Dict[str, Tuple[float, float]] = {}  # stop_name -> (lat, lon)
 
     def add_segment(self, segment: Segment) -> None:
         """Adds a segment to the network.
@@ -92,6 +94,14 @@ class TransportNetwork:
     def get_stops(self) -> List[str]:
         """Returns all stops sorted alphabetically."""
         return sorted(self.all_stops)
+
+    def set_stop_coords(self, stop_name: str, lat: float, lon: float) -> None:
+        """Sets the coordinates for a stop."""
+        self.stop_coords[stop_name] = (lat, lon)
+
+    def get_stop_coords(self, stop_name: str) -> Optional[Tuple[float, float]]:
+        """Returns coordinates for a stop, or None if not available."""
+        return self.stop_coords.get(stop_name)
 
     def get_outgoing_segments(self, stop: str) -> List[Segment]:
         """Returns all segments starting from the given stop."""
@@ -611,6 +621,10 @@ def load_network_from_bus() -> Tuple['TransportNetwork', Dict[Tuple[str, str], f
                 transfer_segments += 2
                 added += 1
 
+    # Store stop coordinates in the network
+    for stop_name, (x, y) in stop_coords.items():
+        network.set_stop_coords(stop_name, x, y)
+
     warnings.append(f"Loaded bus: {len([s for s in network.all_stops if s in stop_coords])} bus stops, {segments_added} bus segments, {walking_segments} walking segments, {transfer_segments} transfer segments")
     return network, {}, warnings
 
@@ -719,6 +733,10 @@ def load_network_all() -> Tuple['TransportNetwork', Dict[Tuple[str, str], float]
                     network.add_segment(segment)
             # Merge fare lookups
             fare_lookup.update(sub_fare_lookup)
+            # Merge coordinates
+            for stop_name, coords in sub_network.stop_coords.items():
+                if stop_name not in network.stop_coords:
+                    network.set_stop_coords(stop_name, coords[0], coords[1])
         except Exception as e:
             all_warnings.append(f"Error loading {name}: {str(e)}")
 

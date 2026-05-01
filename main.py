@@ -28,83 +28,186 @@ def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> fl
 from files import Segment, Journey, TransportNetwork, load_network_from_mtr, load_network, load_network_from_light_rail, load_network_from_bus, load_network_from_airport_express, load_network_all
 
 # =============================================================================
-# Journey Generation (Depth-Limited DFS)
+# A* Pathfinding Algorithm
 # =============================================================================
 
-def generate_journeys(network: TransportNetwork, fare_lookup: Dict[Tuple[str, str], float], origin: str, destination: str,
-                      max_depth: int = 30, max_journeys: int = 20) -> List[Journey]:
-    """Generates candidate journeys using BFS to find shortest paths first.
+import heapq
+from typing import Callable
 
-    Uses BFS to find the minimum number of segments, then uses limited DFS
-    to explore alternative routes up to max_depth.
+class AStarNode:
+    """Node for A* priority queue."""
+    __slots__ = ['g_cost', 'f_cost', 'stop', 'path', 'last_segment']
+
+    def __init__(self, g_cost: float, f_cost: float, stop: str, path: List[Segment], last_segment: Optional[Segment] = None):
+        self.g_cost = g_cost
+        self.f_cost = f_cost
+        self.stop = stop
+        self.path = path
+        self.last_segment = last_segment
+
+    def __lt__(self, other):
+        return self.f_cost < other.f_cost
+
+
+def estimate_cost(network: TransportNetwork, current_stop: str, destination: str,
+                 optimization: str) -> float:
+    """Heuristic function for A* - estimates minimum cost from current to destination.
 
     Args:
         network: The transport network
-        origin: Starting stop name
-        destination: Ending stop name
-        max_depth: Maximum number of segments in a journey (default: 15)
-        max_journeys: Maximum number of journeys to return (default: 20)
+        current_stop: Current stop name
+        destination: Destination stop name
+        optimization: 'duration', 'cost', or 'fewest'
 
     Returns:
-        List of Journey objects found (up to max_journeys)
+        Estimated minimum cost to reach destination
     """
-    # deque imported at module level
+    # Get coordinates
+    curr_coords = network.get_stop_coords(current_stop)
+    dest_coords = network.get_stop_coords(destination)
 
+    if curr_coords and dest_coords:
+        # Use haversine distance as heuristic
+        lat1, lon1 = curr_coords
+        lat2, lon2 = dest_coords
+        straight_line_dist = haversine_distance(lat1, lon1, lat2, lon2)
+
+        if optimization == 'duration':
+            # Assume max speed ~50 km/h for transit = 833 m/min
+            return straight_line_dist / 833
+        elif optimization == 'cost':
+            # Minimum possible cost is 0 (walking)
+            return 0
+        else:  # fewest
+            # Assume at least 1 segment per ~500m or so
+            return max(1, straight_line_dist / 500)
+
+    # Fallback: if no coordinates, use very small heuristic
+    if optimization == 'cost':
+        return 0
+    return 1  # Minimal heuristic for fewest/duration
+
+
+def generate_journeys_astar(network: TransportNetwork, fare_lookup: Dict[Tuple[str, str], float],
+                            origin: str, destination: str, optimization: str = 'duration',
+                            max_journeys: int = 20) -> List[Journey]:
+    """Generates candidate journeys using A* algorithm.
+
+    A* uses a heuristic to prioritize paths that are closer to the goal,
+    making it more efficient than BFS for finding optimal paths.
+
+    Args:
+        network: The transport network
+        fare_lookup: Dictionary of (from, to) -> fare
+        origin: Starting stop name
+        destination: Ending stop name
+        optimization: 'duration', 'cost', or 'fewest' (what to minimize)
+        max_journeys: Maximum number of journeys to return
+
+    Returns:
+        List of Journey objects found
+    """
     if origin not in network.all_stops or destination not in network.all_stops:
         return []
 
-    # BFS to find minimum segments needed
-    # BFS state: (current_stop, path_as_list_of_segments)
-    queue = deque()
-    queue.append((origin, []))
-
-    # Track best path length found for each stop
-    best_length = {origin: 0}
-
     journeys = []
     found_paths = set()
+
+    # Priority queue for A*
+    # heap: (f_cost, counter, AStarNode)
+    counter = 0
+    h_start = estimate_cost(network, origin, destination, optimization)
+
+    if optimization == 'duration':
+        g_start = 0
+    elif optimization == 'cost':
+        g_start = 0
+    else:  # fewest
+        g_start = 0
+
+    initial_node = AStarNode(g_start, g_start + h_start, origin, [])
+    heap = [(initial_node.f_cost, counter, initial_node)]
+
+    # Track best g_cost for each stop (visited with best cost)
+    best_g_cost: Dict[str, float] = {origin: 0}
 
     # Limit exploration
     exploration_count = 0
     MAX_EXPLORATION = 50000
 
-    while queue and len(journeys) < max_journeys and exploration_count < MAX_EXPLORATION:
+    while heap and len(journeys) < max_journeys and exploration_count < MAX_EXPLORATION:
         exploration_count += 1
-        current, path = queue.popleft()
-
-        path_len = len(path)
+        _, _, current = heapq.heappop(heap)
 
         # If we reached destination
-        if current == destination and path:
-            path_key = tuple(s.from_stop + '->' + s.to_stop for s in path)
+        if current.stop == destination and current.path:
+            path_key = tuple(s.from_stop + '->' + s.to_stop for s in current.path)
             if path_key not in found_paths:
                 found_paths.add(path_key)
-                journeys.append(Journey(path.copy(), fare_lookup, origin, destination))
+                journeys.append(Journey(current.path.copy(), fare_lookup, origin, destination))
                 continue
 
-        # If max depth reached, skip
-        if path_len >= max_depth:
-            continue
-
         # Explore neighbors
-        for segment in network.get_outgoing_segments(current):
+        for segment in network.get_outgoing_segments(current.stop):
             next_stop = segment.to_stop
-            new_path_len = path_len + 1
+
+            # Calculate actual cost to reach next_stop
+            if optimization == 'duration':
+                g_cost = current.g_cost + segment.duration
+            elif optimization == 'cost':
+                g_cost = current.g_cost + segment.cost
+            else:  # fewest
+                g_cost = current.g_cost + 1
 
             # Skip if we've found a better path to this stop
-            if next_stop in best_length and best_length[next_stop] <= new_path_len:
+            if next_stop in best_g_cost and best_g_cost[next_stop] <= g_cost:
                 continue
 
             # Check for cycles in current path
-            if any(s.to_stop == next_stop for s in path):
+            if any(s.to_stop == next_stop for s in current.path):
                 continue
 
-            # Update best length and add to queue
-            best_length[next_stop] = new_path_len
-            new_path = path + [segment]
-            queue.append((next_stop, new_path))
+            # Update best cost and add to heap
+            best_g_cost[next_stop] = g_cost
+            h_estimate = estimate_cost(network, next_stop, destination, optimization)
+            f_cost = g_cost + h_estimate
+
+            new_path = current.path + [segment]
+            new_node = AStarNode(g_cost, f_cost, next_stop, new_path, segment)
+            counter += 1
+            heapq.heappush(heap, (f_cost, counter, new_node))
 
     return journeys
+
+# =============================================================================
+# Journey Generation (A* Algorithm)
+# =============================================================================
+
+def generate_journeys(network: TransportNetwork, fare_lookup: Dict[Tuple[str, str], float], origin: str, destination: str,
+                      max_depth: int = 30, max_journeys: int = 20, optimization: str = 'duration') -> List[Journey]:
+    """Generates candidate journeys using A* algorithm.
+
+    Uses A* with geographic heuristic for efficient pathfinding.
+    Supports optimization by duration, cost, or fewest segments.
+
+    Args:
+        network: The transport network
+        fare_lookup: Dictionary of (from, to) -> fare
+        origin: Starting stop name
+        destination: Ending stop name
+        max_depth: Maximum number of segments in a journey (default: 30)
+        max_journeys: Maximum number of journeys to return (default: 20)
+        optimization: 'duration', 'cost', or 'fewest' (what to minimize)
+
+    Returns:
+        List of Journey objects found (up to max_journeys)
+    """
+    if origin not in network.all_stops or destination not in network.all_stops:
+        return []
+
+    # Use A* algorithm
+    return generate_journeys_astar(network, fare_lookup, origin, destination,
+                                   optimization=optimization, max_journeys=max_journeys)
 
 
 # =============================================================================
@@ -465,11 +568,16 @@ def query_journeys(network: TransportNetwork, fare_lookup: Dict[Tuple[str, str],
     # Get preference
     preference = get_preference()
 
+    # Map preference to optimization parameter
+    optimization_map = {'fastest': 'duration', 'cheapest': 'cost', 'fewest': 'fewest'}
+    optimization = optimization_map.get(preference, 'duration')
+
     # Get transport medium preference (multi-select)
     transport_pref = get_transport_preferences(network)
 
-    # Generate journeys
-    journeys = generate_journeys(network, fare_lookup, origin, destination)
+    # Generate journeys using A* with optimization
+    journeys = generate_journeys(network, fare_lookup, origin, destination,
+                               optimization=optimization)
 
     # Apply transport-mode filter (if any)
     journeys = filter_journeys_by_transport(journeys, transport_pref)
