@@ -122,6 +122,9 @@ def generate_journeys_astar(network: TransportNetwork, fare_lookup: Dict[Tuple[s
     Returns:
         List of Journey objects found
     """
+    origin = network.get_canonical_stop(origin) if hasattr(network, 'get_canonical_stop') else origin
+    destination = network.get_canonical_stop(destination) if hasattr(network, 'get_canonical_stop') else destination
+
     if origin not in network.all_stops or destination not in network.all_stops:
         return []
 
@@ -167,30 +170,34 @@ def generate_journeys_astar(network: TransportNetwork, fare_lookup: Dict[Tuple[s
         # Explore neighbors
         for segment in network.get_outgoing_segments(current.stop):
             next_stop = segment.to_stop
+            next_canonical = network.get_canonical_stop(next_stop) if hasattr(network, 'get_canonical_stop') else next_stop
 
             # Calculate actual cost to reach next_stop
             if optimization == 'duration':
                 g_cost = current.g_cost + segment.duration
             elif optimization == 'cost':
-                g_cost = current.g_cost + segment.cost
+                if current.last_segment is not None and segment.route_id and current.last_segment.route_id == segment.route_id and current.last_segment.mode_of_transport == segment.mode_of_transport:
+                    g_cost = current.g_cost
+                else:
+                    g_cost = current.g_cost + segment.cost
             else:  # fewest
                 g_cost = current.g_cost + 1
 
             # Skip if we've found a better path to this stop
-            if next_stop in best_g_cost and best_g_cost[next_stop] <= g_cost:
+            if next_canonical in best_g_cost and best_g_cost[next_canonical] <= g_cost:
                 continue
 
-            # Check for cycles in current path
-            if any(s.to_stop == next_stop for s in current.path):
+            # Check for cycles in current path using canonical stops
+            if any((network.get_canonical_stop(s.to_stop) if hasattr(network, 'get_canonical_stop') else s.to_stop) == next_canonical for s in current.path):
                 continue
 
             # Update best cost and add to heap
-            best_g_cost[next_stop] = g_cost
+            best_g_cost[next_canonical] = g_cost
             h_estimate = estimate_cost(network, next_stop, destination, optimization)
             f_cost = g_cost + h_estimate
 
             new_path = current.path + [segment]
-            new_node = AStarNode(g_cost, f_cost, next_stop, new_path, segment)
+            new_node = AStarNode(g_cost, f_cost, next_canonical, new_path, segment)
             counter += 1
             heapq.heappush(heap, (f_cost, counter, new_node))
 
@@ -449,8 +456,11 @@ def display_journeys(journeys: List[Journey], origin: str, destination: str,
         print("  Route:")
 
         for j, segment in enumerate(journey.segments, 1):
+            bus_info = ""
+            if segment.mode_of_transport == 'Bus' and segment.route_name:
+                bus_info = f" [Bus {segment.route_name} ({segment.operator})]"
             print(f"    {j}. {segment.from_stop} -> {segment.to_stop} "
-                f"({segment.duration}min, ${segment.cost:.2f}) [{segment.mode_of_transport}]")
+                f"({segment.duration}min, ${segment.cost:.2f}){bus_info} [{segment.mode_of_transport}]")
 
         print()
 

@@ -271,6 +271,11 @@ class ResultsTable(QWidget):
                 f"{icon} {seg.mode_of_transport}</span>"
             )
 
+            # Bus info if available
+            bus_info = ""
+            if seg.mode_of_transport == 'Bus' and seg.route_name:
+                bus_info = f"<span style='font-size:10px; color:#fab387; margin-left:6px;'>Bus {seg.route_name} ({seg.operator})</span>"
+
             row_bg = "#1e1e2e" if k % 2 == 0 else "#181825"
 
             # Use a table row for correct right-alignment (float:right unsupported in Qt)
@@ -294,6 +299,7 @@ class ResultsTable(QWidget):
                 <td style='text-align:right; white-space:nowrap;
                            vertical-align:middle; padding-left:8px;'>
                   {badge}
+                  {bus_info}
                   <span style='font-size:11px; color:#a6adc8;
                                margin-left:6px;'>{seg.duration} min</span>
                   <span style='font-size:11px; color:#a6e3a1;
@@ -303,6 +309,7 @@ class ResultsTable(QWidget):
             </table>
           </div>
             """
+    
 
         html += "</div>"
         self.detail_label.setText(html)
