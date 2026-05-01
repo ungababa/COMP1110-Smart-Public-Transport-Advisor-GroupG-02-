@@ -177,6 +177,30 @@ def load_network_from_mtr() -> Tuple[TransportNetwork, Dict[Tuple[str, str], flo
     except Exception as e:
         warnings.append(f"Warning: Could not read airport fares: {str(e)}")
 
+    # Load MTR station coordinates
+    coords_file = 'data/mtr/mtr_station_coords.csv'
+    loaded_coords = 0
+    try:
+        with open(coords_file, 'r', encoding='utf-8-sig') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                station = row.get('Station', '').strip()
+                lat_str = row.get('Latitude', '').strip()
+                lon_str = row.get('Longitude', '').strip()
+
+                if station and lat_str and lon_str:
+                    try:
+                        lat = float(lat_str)
+                        lon = float(lon_str)
+                        network.set_stop_coords(station, lat, lon)
+                        loaded_coords += 1
+                    except ValueError:
+                        pass
+    except Exception as e:
+        warnings.append(f"Warning: Could not read MTR coords: {str(e)}")
+
+    # Typical duration between adjacent stations (in minutes)
+    # Most MTR journeys are 2-4 minutes between stations
     TYPICAL_DURATION = 3
     ael_durations = {
         ('HongKong', 'Kowloon'): 5,
@@ -210,6 +234,7 @@ def load_network_from_mtr() -> Tuple[TransportNetwork, Dict[Tuple[str, str], flo
         return net, {}, ["Warning: No segments created from MTR data, using data/network.csv"] + fw
 
     warnings.append(f"Loaded {len(network.all_stops)} stops and {segments_added} segments from MTR data")
+
     return network, fare_lookup, warnings
 
 
