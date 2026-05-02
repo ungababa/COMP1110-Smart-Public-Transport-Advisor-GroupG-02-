@@ -3,6 +3,7 @@ Hong Kong Map Visualization Widget
 """
 
 import os
+import csv
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from PyQt6.QtWidgets import (
@@ -14,11 +15,39 @@ from PyQt6.QtCore import Qt, pyqtSignal, QRectF
 from PyQt6.QtGui import QPen, QBrush, QColor, QPainter, QPixmap, QFont
 
 
+# ── Transport mode colours ────────────────────────────────────────────────────
 MODE_COLORS = {
     'MTR':  QColor(0, 100, 200),
     'Bus':  QColor(0, 150, 50),
     'Walk': QColor(100, 100, 100),
 }
+
+def load_station_coords():
+    """Load MTR station coordinates from mtr_lines_coords.csv."""
+    coords = {}
+    csv_paths = [
+        Path('data/mtr/mtr_lines_coords.csv'),
+        Path('gui/../data/mtr/mtr_lines_coords.csv'),
+        Path(__file__).parent.parent / 'data' / 'mtr' / 'mtr_lines_coords.csv',
+    ]
+
+    for csv_path in csv_paths:
+        if csv_path.exists():
+            try:
+                with open(csv_path, 'r', encoding='utf-8') as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        station = row['Station'].strip()
+                        lat = float(row['Latitude'])
+                        lon = float(row['Longitude'])
+                        coords[station] = (lat, lon)
+                return coords
+            except Exception:
+                pass
+    return {}
+
+
+STATION_COORDS = load_station_coords()
 
 # ── Map geometry ──────────────────────────────────────────────────────────────
 MAP_PIXEL_WIDTH  = 3214
@@ -330,11 +359,10 @@ class HKMapWidget(QWidget):
         mtr_count = 0
         important_bus_count = 0
 
-        # Render all stops with available coordinates
+        # MTR stations
         for stop in self.network.all_stops:
-            coords = self.network.get_stop_coords(stop)
-            if coords:
-                lat, lon = coords
+            if stop in STATION_COORDS:
+                lat, lon = STATION_COORDS[stop]
                 x, y = map_range(lat, lon)
                 self.stop_positions[stop] = (x, y)
 
@@ -443,9 +471,8 @@ class HKMapWidget(QWidget):
         placed_rects: list = []   # QRectF of each committed label pill
 
         for stop_name, (x, y) in all_journey_positions.items():
-            coords = self.network.get_stop_coords(stop_name)
-            is_mtr = coords is not None
-            should_label = stop_name in label_stops
+            is_mtr        = stop_name in STATION_COORDS
+            should_label  = stop_name in label_stops
 
             # Highlight dot — white fill with a coloured ring
             # Interchange/endpoint dots are slightly larger for emphasis
