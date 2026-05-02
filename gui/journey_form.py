@@ -29,6 +29,7 @@ class JourneyForm(QWidget):
     """Left-panel widget for entering journey query parameters."""
 
     searchRequested = pyqtSignal(dict)
+    customDataRequested = pyqtSignal(bool)  # True = merge, False = replace
 
     def __init__(self, stops, parent=None):
         super().__init__(parent)
@@ -162,6 +163,59 @@ class JourneyForm(QWidget):
             layout.addLayout(row)
             layout.addSpacing(5)
 
+        layout.addSpacing(14)
+        self._divider(layout)
+        layout.addSpacing(14)
+
+        # ── Custom Data Loading ───────────────────────────────────────────────
+        custom_label = QLabel("CUSTOM DATA")
+        custom_label.setStyleSheet(
+            "font-size: 11px; font-weight: 700; color: #6c7086; "
+            "letter-spacing: 1.2px; padding: 0;"
+        )
+        layout.addWidget(custom_label)
+        layout.addSpacing(6)
+
+        custom_row = QHBoxLayout()
+        custom_row.setSpacing(6)
+
+        custom_replace_btn = QPushButton("Replace Network")
+        custom_replace_btn.setToolTip("Load custom data (replace existing)")
+        custom_replace_btn.setMinimumHeight(36)
+        custom_replace_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #f5c2de;
+                color: #1e1e2e;
+                border: none;
+                border-radius: 6px;
+                font-size: 12px;
+                font-weight: 600;
+            }
+            QPushButton:hover    { background-color: #f8a8d2; }
+            QPushButton:pressed  { background-color: #f38cc6; }
+        """)
+        custom_replace_btn.clicked.connect(lambda: self.customDataRequested.emit(False))
+        custom_row.addWidget(custom_replace_btn)
+
+        custom_merge_btn = QPushButton("Merge")
+        custom_merge_btn.setToolTip("Load custom data (merge with existing)")
+        custom_merge_btn.setMinimumHeight(36)
+        custom_merge_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #a6e3a1;
+                color: #1e1e2e;
+                border: none;
+                border-radius: 6px;
+                font-size: 12px;
+                font-weight: 600;
+            }
+            QPushButton:hover    { background-color: #94e2d5; }
+            QPushButton:pressed  { background-color: #89dceb; }
+        """)
+        custom_merge_btn.clicked.connect(lambda: self.customDataRequested.emit(True))
+        custom_row.addWidget(custom_merge_btn)
+
+        layout.addLayout(custom_row)
         layout.addSpacing(14)
         self._divider(layout)
         layout.addSpacing(14)

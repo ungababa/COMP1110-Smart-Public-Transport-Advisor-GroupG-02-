@@ -2,32 +2,9 @@ import os
 import sys
 import math
 import xml.etree.ElementTree as ET
-import csv
-import heapq
-from files import Segment, Journey, TransportNetwork, load_network, load_network_all
-from collections import deque
-from typing import Callable
 from typing import List, Dict, Tuple, Optional
-
-# Require colorama for CLI colours
-from colorama import init as _colorama_init, Fore, Style
-_colorama_init(autoreset=True)
-
-def _c(text: str, color: str = '') -> str:
-    """Wrap text with colour codes."""
-    return f"{color}{text}{Style.RESET_ALL}"
-
-
-def _rgb(r: int, g: int, b: int) -> str:
-    """Return a 24-bit ANSI foreground colour escape sequence."""
-    return f"\033[38;2;{r};{g};{b}m"
-
-
-HEADING_COLOUR = _rgb(173, 216, 230)
-BREAK_COLOUR = _rgb(187, 213, 218)
-RESULT_COLOUR = _rgb(154, 216, 114)
-PROMPT_COLOUR = Fore.WHITE
-
+import csv
+from collections import deque
 
 def preference_to_optimization(preference: str) -> str:
     """Map a user preference to the A* optimization mode."""
@@ -42,12 +19,14 @@ def preference_to_optimization(preference: str) -> str:
 # =============================================================================
 # Import data structures and load functions from files.py
 # =============================================================================
-from files import Segment, Journey, TransportNetwork, load_network, load_network_all, haversine_distance
+from files import Segment, Journey, TransportNetwork, load_network, load_network_all, haversine_distance, load_custom_data
 
 # =============================================================================
 # A* Pathfinding Algorithm
 # =============================================================================
 
+import heapq
+from typing import Callable
 
 class AStarNode:
     """Node for A* priority queue."""
@@ -123,7 +102,7 @@ def transfer_time_penalty(prev_segment: Optional[Segment], next_segment: Segment
         if next_segment.route_name == prev_segment.route_name:
             return 0
 
-    # If both segments are the same mode and share either route_id or route_name, no transfer penalty.
+    # If both segments are the same mode and share eithesr route_id or route_name, no transfer penalty.
     if next_segment.route_id == prev_segment.route_id or (next_segment.route_name and prev_segment.route_name and next_segment.route_name == prev_segment.route_name):
         return 0
 
@@ -314,19 +293,19 @@ def get_transport_preferences(network: TransportNetwork) -> Optional[set]:
             modes.add(s.mode_of_transport)
 
     if not modes:
-        print("\n" + _c("No transport modes detected in the current network.", RESULT_COLOUR))
+        print("\nNo transport modes detected in the current network.")
         return None
 
     modes_list = sorted(modes)
-    print("\n" + _c("Select transport medium preference (multi-select allowed):", HEADING_COLOUR + Style.BRIGHT))
+    print("\nSelect transport medium preference (multi-select allowed):")
     for i, m in enumerate(modes_list, 1):
-        print(_c(f"  {i}.", Fore.YELLOW), _c(m, Fore.WHITE))
+        print(f"  {i}. {m}")
     any_index = len(modes_list) + 1
-    print(_c(f"  {any_index}.", Fore.YELLOW), _c("Any / No preference", Fore.WHITE))
-    print(_c("Enter choices as numbers separated by commas (e.g. 1,3). Press Enter for Any.", PROMPT_COLOUR), end=" ")
+    print(f"  {any_index}. Any / No preference")
+    print("Enter choices as numbers separated by commas (e.g. 1,3). Press Enter for Any.")
 
     while True:
-        print(end="", flush=True)
+        print("Enter choice(s): ", end="", flush=True)
         sys.stdout.flush()
         choice = input().strip()
         if choice == "":
@@ -359,7 +338,7 @@ def get_transport_preferences(network: TransportNetwork) -> Optional[set]:
                     break
 
         if not valid:
-            print(_c("Invalid input. Use numbers like '1' or '1,3' or ranges '1-3'.", RESULT_COLOUR))
+            print("Invalid input. Use numbers like '1' or '1,3' or ranges '1-3'.")
             continue
 
         # If user selected Any
@@ -377,7 +356,7 @@ def get_transport_preferences(network: TransportNetwork) -> Optional[set]:
                 break
 
         if out_of_range or not selected:
-            print(_c("Invalid selection. Please choose from the listed numbers.", RESULT_COLOUR))
+            print("Invalid selection. Please choose from the listed numbers.")
             continue
 
         return selected
@@ -417,7 +396,9 @@ def display_menu() -> None:
     print(_c("  2.", Fore.YELLOW), _c("Query journeys", Style.NORMAL))
     print(_c("  3.", Fore.YELLOW), _c("Show network summary", Style.NORMAL))
     print(_c("  4.", Fore.YELLOW), _c("Load different network file", Style.NORMAL))
-    print(_c("  5.", Fore.YELLOW), _c("Exit", Style.NORMAL))
+    print(_c("  5.", Fore.YELLOW), _c("Load custom data (replace)", Style.NORMAL))
+    print(_c("  6.", Fore.YELLOW), _c("Load custom data (merge)", Style.NORMAL))
+    print(_c("  7.", Fore.YELLOW), _c("Exit", Style.NORMAL))
     print(sep)
 
 
@@ -425,29 +406,32 @@ def list_stops(network: TransportNetwork) -> None:
     """Displays stops in the network with search/filter options."""
     stops = network.get_stops()
     if not stops:
-        print("\n" + _c("No stops in the network.", RESULT_COLOUR))
+        print("\nNo stops in the network.")
         return
 
-    print(_c(f"\nTotal stops: {len(stops)}", HEADING_COLOUR))
-    print(_c("Press ENTER to list all stop or TYPE stop name to search: ", PROMPT_COLOUR), end="", flush=True)
+    print(f"\nTotal stops: {len(stops)}")
+    print("Enter stop name to search (or 'all' to list all, 'summary' for stats): ", end="", flush=True)
     sys.stdout.flush()
     query = input().strip()
 
-    if (query == ""):
-        print(_c("\nAll stops:", HEADING_COLOUR))
-        print(_c("-" * 30, BREAK_COLOUR))
+    if query.lower() == 'summary':
+        show_summary(network)
+        return
+    elif query.lower() == 'all':
+        print("\nAll stops:")
+        print("-" * 30)
         for i, stop in enumerate(stops, 1):
-            print(_c(f"  {i}.", Fore.YELLOW), _c(stop, RESULT_COLOUR))
+            print(f"  {i}. {stop}")
     else:
         # Filter stops containing the query (case insensitive)
         filtered = [stop for stop in stops if query.lower() in stop.lower()]
         if not filtered:
-            print(_c(f"\nNo stops found containing '{query}'.", RESULT_COLOUR))
+            print(f"\nNo stops found containing '{query}'.")
         else:
-            print(_c(f"\nStops containing '{query}' ({len(filtered)} found):", HEADING_COLOUR))
-            print(_c("-" * 30, BREAK_COLOUR))
+            print(f"\nStops containing '{query}' ({len(filtered)} found):")
+            print("-" * 30)
             for i, stop in enumerate(filtered, 1):
-                print(_c(f"  {i}.", Fore.YELLOW), _c(stop, RESULT_COLOUR))
+                print(f"  {i}. {stop}")
 
 
 def show_summary(network: TransportNetwork) -> None:
@@ -456,15 +440,15 @@ def show_summary(network: TransportNetwork) -> None:
     num_segments = network.get_num_segments()
     avg_duration, avg_cost = network.get_average_stats()
 
-    print("\n" + _c("-" * 40, BREAK_COLOUR))
-    print(_c("         Network Summary", HEADING_COLOUR))
-    print(_c("-" * 40, BREAK_COLOUR))
-    print(_c(f"  Number of stops:    {num_stops}", RESULT_COLOUR))
-    print(_c(f"  Number of segments: {num_segments}", RESULT_COLOUR))
+    print("\n" + "-" * 40)
+    print("         Network Summary")
+    print("-" * 40)
+    print(f"  Number of stops:    {num_stops}")
+    print(f"  Number of segments: {num_segments}")
     if num_segments > 0:
-        print(_c(f"  Avg segment duration: {avg_duration:.1f} minutes", RESULT_COLOUR))
-        print(_c(f"  Avg segment cost:     ${avg_cost:.2f}", RESULT_COLOUR))
-    print(_c("-" * 40, BREAK_COLOUR))
+        print(f"  Avg segment duration: {avg_duration:.1f} minutes")
+        print(f"  Avg segment cost:     ${avg_cost:.2f}")
+    print("-" * 40)
 
 
 def display_journeys(journeys: List[Journey], origin: str, destination: str,
@@ -485,13 +469,11 @@ def display_journeys(journeys: List[Journey], origin: str, destination: str,
     # Rank and take top N
     ranked = rank_journeys(journeys, preference)[:top_n]
 
-    header = _c('=' * 64, BREAK_COLOUR)
-    title = _c(f"  Journeys from '{origin}' to '{destination}'", HEADING_COLOUR + Style.BRIGHT)
-    sub = _c(f"  Preference: {preference} | Found {len(journeys)} journey(s), showing top {len(ranked)}", RESULT_COLOUR)
-    print(f"\n{header}")
-    print(title)
-    print(sub)
-    print(header)
+    print(f"\n{'=' * 60}")
+    print(f"  Journeys from '{origin}' to '{destination}'")
+    print(f"  Preference: {preference}")
+    print(f"  Found {len(journeys)} journey(s), showing top {len(ranked)}")
+    print(f"{'=' * 60}")
 
     for i, journey in enumerate(ranked, 1):
         print(f"\n{_c('--- Journey', HEADING_COLOUR)} {_c(str(i), HEADING_COLOUR)} {_c('---', HEADING_COLOUR)}")
@@ -552,7 +534,7 @@ def prompt_stop_input(prompt_msg: str, network: TransportNetwork) -> str:
         user_input = input().strip()
 
         if not user_input:
-            print(_c("Please enter a stop name.", RESULT_COLOUR))
+            print("Please enter a stop name.")
             continue
 
         normalized = " ".join(user_input.lower().split())
@@ -566,12 +548,12 @@ def prompt_stop_input(prompt_msg: str, network: TransportNetwork) -> str:
             matches = [s for s in stops if all(w in s.lower() for w in words)]
             if matches:
                 if len(matches) == 1:
-                    print(_c(f"  -> {matches[0]}", RESULT_COLOUR))
+                    print(f"  -> {matches[0]}")
                     return matches[0]
-                print(_c(f"  Matches: {', '.join(matches[:8])}", RESULT_COLOUR))
+                print(f"  Matches: {', '.join(matches[:8])}")
                 continue
 
-        print(_c(f"Error: No stop found matching '{user_input}'", RESULT_COLOUR))
+        print(f"Error: No stop found matching '{user_input}'")
 
 
 def get_preference() -> str:
@@ -592,7 +574,7 @@ def get_preference() -> str:
         elif choice == '3':
             return 'fewest'
         else:
-            print(_c("Invalid choice. Please enter 1, 2, or 3.", RESULT_COLOUR))
+            print("Invalid choice. Please enter 1, 2, or 3.")
 
 
 # =============================================================================
@@ -611,7 +593,7 @@ def query_journeys(network: TransportNetwork, fare_lookup: Dict[Tuple[str, str],
 
     is_valid, error_msg, origin, destination = validate_stops(network, origin, destination)
     if not is_valid:
-        print(_c(f"\n{error_msg}", RESULT_COLOUR))
+        print(f"\n{error_msg}")
         return
 
     transport_pref = get_transport_preferences(network)
@@ -626,12 +608,12 @@ def query_journeys(network: TransportNetwork, fare_lookup: Dict[Tuple[str, str],
 
 def load_network_interactive() -> Tuple[Optional[TransportNetwork], Dict[Tuple[str, str], float], List[str]]:
     """Prompts user for network file path and loads it."""
-    print(_c("\nEnter network file path: ", PROMPT_COLOUR), end="", flush=True)
+    print("\nEnter network file path: ", end="", flush=True)
     sys.stdout.flush()
     filename = input().strip()
 
     if not filename:
-        print(_c("Error: No filename provided.", RESULT_COLOUR))
+        print("Error: No filename provided.")
         return None, {}, ["Error: No filename provided."]
 
     network, fare_lookup, warnings = load_network(filename)
@@ -648,19 +630,19 @@ def main():
     network, fare_lookup, warnings = load_network_all()
 
     if not network.all_stops:
-        print(_c("Loading default network from 'data/network.csv'...", HEADING_COLOUR))
+        print("Loading default network from 'data/network.csv'...")
         network, fare_lookup, warnings = load_network("data/network.csv")
 
     for warning in warnings:
-        print(_c(warning, RESULT_COLOUR))
+        print(warning)
 
     if not network.all_stops:
-        print(_c("\nWarning: No network could be loaded.", RESULT_COLOUR))
-        print(_c("You can load a different network using option 4.", RESULT_COLOUR))
+        print("\nWarning: No network could be loaded.")
+        print("You can load a different network using option 4.")
 
     while True:
         display_menu()
-        print(_c("\nEnter choice (1-5): ", PROMPT_COLOUR), end="", flush=True)
+        print(_c("\nEnter choice (1-7): ", PROMPT_COLOUR), end="", flush=True)
         sys.stdout.flush()
         choice = input().strip()
 
@@ -677,35 +659,51 @@ def main():
             if new_network and new_network.all_stops:
                 network = new_network
                 fare_lookup = new_fare_lookup
-                print("\nNetwork loaded successfully!")
+                print(_c("\nNetwork loaded successfully!", RESULT_COLOUR))
         elif choice == '5':
+            new_network, new_fare_lookup, errors = load_custom_data(merge=False)
+            for error in errors:
+                print(_c(error, RESULT_COLOUR))
+            if new_network and new_network.all_stops:
+                network = new_network
+                fare_lookup = new_fare_lookup
+                print(_c("\nCustom network loaded (replaced existing)!", RESULT_COLOUR))
+        elif choice == '6':
+            new_network, new_fare_lookup, errors = load_custom_data(merge=True)
+            for error in errors:
+                print(_c(error, RESULT_COLOUR))
+            if new_network and new_network.all_stops:
+                network = new_network
+                fare_lookup = new_fare_lookup
+                print(_c("\nCustom network merged with existing!", RESULT_COLOUR))
+        elif choice == '7':
             print(_c("\nThank you for using Smart Public Transport Advisor!", HEADING_COLOUR))
             print(_c("Goodbye!", RESULT_COLOUR))
             break
         else:
-            print(_c("\nInvalid choice. Please enter a number 1-5.", RESULT_COLOUR))
+            print(_c("\nInvalid choice. Please enter a number 1-7.", RESULT_COLOUR))
 
 
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--gui":
         from gui.main_window import run_gui
 
-        print(_c("Loading transport network for GUI...", HEADING_COLOUR))
+        print("Loading transport network for GUI...")
         network, fare_lookup, warnings = load_network_all()
 
         if not network.all_stops:
-            print(_c("Loading default network from 'data/network.csv'...", HEADING_COLOUR))
+            print("Loading default network from 'data/network.csv'...")
             network, fare_lookup, warnings = load_network("data/network.csv")
 
         for warning in warnings:
-            print(_c(warning, RESULT_COLOUR))
+            print(warning)
 
         if not network.all_stops:
-            print(_c("Error: No network could be loaded.", RESULT_COLOUR))
+            print("Error: No network could be loaded.")
             sys.exit(1)
 
-        print(_c(f"Loaded: {len(network.all_stops)} stops", RESULT_COLOUR))
-        print(_c("Starting GUI...", HEADING_COLOUR))
+        print(f"Loaded: {len(network.all_stops)} stops")
+        print("Starting GUI...")
         run_gui(network, fare_lookup)
     else:
         main()
