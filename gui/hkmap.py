@@ -3,6 +3,7 @@ Hong Kong Map Visualization Widget
 """
 
 import os
+import csv
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from PyQt6.QtWidgets import (
@@ -16,111 +17,37 @@ from PyQt6.QtGui import QPen, QBrush, QColor, QPainter, QPixmap, QFont
 
 # ── Transport mode colours ────────────────────────────────────────────────────
 MODE_COLORS = {
-    'MTR':            QColor(0, 100, 200),
-    'Bus':            QColor(0, 150, 50),
-    'Light Rail':     QColor(200, 100, 0),
-    'Walk':           QColor(100, 100, 100),
-    'Airport Express':QColor(150, 0, 150),
+    'MTR':  QColor(0, 100, 200),
+    'Bus':  QColor(0, 150, 50),
+    'Walk': QColor(100, 100, 100),
 }
 
-# ── MTR station coordinates (WGS84) ──────────────────────────────────────────
-# Corrected coordinates verified against official MTR map
-STATION_COORDS = {
-    'Admiralty':          (22.2794, 114.1651),
-    'Airport':            (22.3160, 113.9366),
-    'AsiaWorld-Expo':     (22.3218, 113.9412),
-    'Austin':             (22.3046, 114.1670),
-    'Causeway Bay':       (22.2802, 114.1835),
-    'Central':            (22.2820, 114.1576),
-    'Chai Wan':           (22.2644, 114.2368),
-    'Che Kung Temple':    (22.3748, 114.1861),
-    'Cheung Sha Wan':     (22.3354, 114.1563),
-    'Choi Hung':          (22.3348, 114.2089),
-    'City One':           (22.3828, 114.2035),
-    'Diamond Hill':       (22.3401, 114.2016),
-    'Disneyland Resort':  (22.3155, 114.0451),
-    'East Tsim Sha Tsui': (22.2955, 114.1754),
-    'Fanling':            (22.4921, 114.1387),
-    'Fo Tan':             (22.3953, 114.1982),
-    'Fortress Hill':      (22.2881, 114.1936),
-    'HKU':                (22.2841, 114.1354),
-    'Hang Hau':           (22.3156, 114.2644),
-    'Heng Fa Chuen':      (22.2769, 114.2398),
-    'Heng On':            (22.4174, 114.2258),
-    'Hin Keng':           (22.3640, 114.1708),
-    'Ho Man Tin':         (22.3093, 114.1829),
-    'Hong Kong':          (22.2850, 114.1580),
-    'Hung Hom':           (22.3029, 114.1816),
-    'Jordan':             (22.3049, 114.1718),
-    'Kai Tak':            (22.3304, 114.1994),
-    'Kam Sheung Road':    (22.4348, 114.0634),
-    'Kennedy Town':       (22.2815, 114.1283),
-    'Kowloon Bay':        (22.3235, 114.2141),
-    'Kowloon Tong':       (22.3370, 114.1762),
-    'Kowloon':            (22.3049, 114.1615),
-    'Kwai Fong':          (22.3569, 114.1279),
-    'Kwai Hing':          (22.3632, 114.1312),
-    'Kwun Tong':          (22.3121, 114.2265),
-    'LOHAS Park':         (22.2957, 114.2689),
-    'Lai Chi Kok':        (22.3373, 114.1482),
-    'Lai King':           (22.3484, 114.1261),
-    'Lam Tin':            (22.3068, 114.2330),
-    'Lei Tung':           (22.2421, 114.1562),
-    'Lo Wu':              (22.5283, 114.1134),
-    'Lok Fu':             (22.3380, 114.1871),
-    'Lok Ma Chau':        (22.5144, 114.0657),
-    'Long Ping':          (22.4477, 114.0253),
-    'Ma On Shan':         (22.4247, 114.2316),
-    'Mei Foo':            (22.3381, 114.1376),
-    'Mong Kok East':      (22.3222, 114.1728),
-    'Mong Kok':           (22.3191, 114.1694),
-    'Nam Cheong':         (22.3268, 114.1533),
-    'Ngau Tau Kok':       (22.3154, 114.2193),
-    'North Point':        (22.2909, 114.2007),
-    'Ocean Park':         (22.2486, 114.1743),
-    'Olympic':            (22.3178, 114.1602),
-    'Po Lam':             (22.3224, 114.2580),
-    'Prince Edward':      (22.3245, 114.1683),
-    'Quarry Bay':         (22.2878, 114.2096),
-    'Sai Wan Ho':         (22.2816, 114.2224),
-    'Sai Ying Pun':       (22.2856, 114.1430),
-    'Sha Tin Wai':        (22.3771, 114.1950),
-    'Sha Tin':            (22.3825, 114.1875),
-    'Sham Shui Po':       (22.3307, 114.1623),
-    'Shau Kei Wan':       (22.2789, 114.2289),
-    'Shek Kip Mei':       (22.3320, 114.1687),
-    'Shek Mun':           (22.3877, 114.2083),
-    'Sheung Shui':        (22.5012, 114.1280),
-    'Sheung Wan':         (22.2862, 114.1518),
-    'Siu Hong':           (22.4120, 113.9786),
-    'South Horizons':     (22.2425, 114.1491),
-    'Sunny Bay':          (22.3318, 114.0288),
-    'Tai Koo':            (22.2846, 114.2161),
-    'Tai Po Market':      (22.4446, 114.1706),
-    'Tai Shui Hang':      (22.4088, 114.2230),
-    'Tai Wai':            (22.3731, 114.1786),
-    'Tai Wo Hau':         (22.3708, 114.1250),
-    'Tai Wo':             (22.4511, 114.1611),
-    'Tin Hau':            (22.2827, 114.1917),
-    'Tin Shui Wai':       (22.4481, 114.0046),
-    'Tiu Keng Leng':      (22.3042, 114.2524),
-    'Tseung Kwan O':      (22.3074, 114.2600),
-    'Tsim Sha Tsui':      (22.2973, 114.1722),
-    'Tsing Yi':           (22.3584, 114.1070),
-    'Tsuen Wan West':     (22.3686, 114.1098),
-    'Tsuen Wan':          (22.3736, 114.1178),
-    'Tuen Mun':           (22.3952, 113.9731),
-    'Tung Chung':         (22.2893, 113.9416),
-    'University':         (22.4134, 114.2102),
-    'Wan Chai':           (22.2773, 114.1728),
-    'Whampo':             (22.3050, 114.1896),
-    'Wong Chuk Hang':     (22.2480, 114.1681),
-    'Wong Tai Sin':       (22.3417, 114.1939),
-    'Wu Kai Sha':         (22.4291, 114.2438),
-    'Yau Ma Tei':         (22.3129, 114.1707),
-    'Yau Tong':           (22.2979, 114.2371),
-    'Yuen Long':          (22.4461, 114.0352),
-}
+def load_station_coords():
+    """Load MTR station coordinates from mtr_lines_coords.csv."""
+    coords = {}
+    csv_paths = [
+        Path('data/mtr/mtr_lines_coords.csv'),
+        Path('gui/../data/mtr/mtr_lines_coords.csv'),
+        Path(__file__).parent.parent / 'data' / 'mtr' / 'mtr_lines_coords.csv',
+    ]
+
+    for csv_path in csv_paths:
+        if csv_path.exists():
+            try:
+                with open(csv_path, 'r', encoding='utf-8') as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        station = row['Station'].strip()
+                        lat = float(row['Latitude'])
+                        lon = float(row['Longitude'])
+                        coords[station] = (lat, lon)
+                return coords
+            except Exception:
+                pass
+    return {}
+
+
+STATION_COORDS = load_station_coords()
 
 # ── Map geometry ──────────────────────────────────────────────────────────────
 MAP_PIXEL_WIDTH  = 3214
@@ -183,13 +110,9 @@ def load_bus_stops():
                         stop_id_coords[stop_id] = (lat, lon)
                     except ValueError:
                         continue
-            
-            print(f"Loaded {len(stop_id_coords)} bus stops from STOP_BUS.xml")
         
-        except Exception as e:
-            print(f"Error loading bus stops: {e}")
-    else:
-        print("Warning: STOP_BUS.xml not found.")
+        except Exception:
+            pass
     
     # Load stop names from RSTOP_BUS.xml and map to coordinates
     xml_paths = [
@@ -218,16 +141,12 @@ def load_bus_stops():
                     if stop_id not in stop_id_to_names:
                         stop_id_to_names[stop_id] = set()
                     stop_id_to_names[stop_id].add(stop_name)
-                    # Map stop name to coordinates (only add if not already mapped)
                     if stop_name not in stop_name_coords:
                         stop_name_coords[stop_name] = stop_id_coords[stop_id]
         
-        except Exception as e:
-            print(f"Error loading stop names: {e}")
-    else:
-        print("Warning: RSTOP_BUS.xml not found.")
+        except Exception:
+            pass
 
-    print(f"Loaded {len(stop_name_coords)} named bus stops for journey mapping")
     return stop_id_coords, stop_name_coords
 
 
@@ -250,29 +169,25 @@ def identify_important_bus_stations(stop_id_coords):
             break
     
     if not xml_file:
-        print("Warning: RSTOP_BUS.xml not found. All bus stops will be treated equally.")
         return important_stops
     
     try:
         tree = ET.parse(xml_file)
         root = tree.getroot()
         
-        # Count routes per stop
         for route_elem in root.findall('RSTOP'):
             stop_id = route_elem.findtext('STOP_ID')
             if stop_id and stop_id in stop_id_coords:
                 stop_route_count[stop_id] = stop_route_count.get(stop_id, 0) + 1
         
-        # Select top 300 stops by route count
         MAX_IMPORTANT_STOPS = 300
         sorted_stops = sorted(stop_route_count.items(), key=lambda x: x[1], reverse=True)
         for stop_id, count in sorted_stops[:MAX_IMPORTANT_STOPS]:
             important_stops[stop_id] = count
     
-    except Exception as e:
-        print(f"Error identifying important bus stations: {e}")
+    except Exception:
+        pass
     
-    print(f"Identified {len(important_stops)} top important bus interchanges (top 300 by route density)")
     return important_stops
 
 
@@ -421,11 +336,9 @@ class HKMapWidget(QWidget):
                     pixmap = QPixmap(str(candidate))
                     bg = self.scene.addPixmap(pixmap)
                     bg.setZValue(-1)
-                    print(f"Map background loaded: {candidate}")
                     return
-                except Exception as e:
-                    print(f"Error loading {candidate}: {e}")
-        print("Warning: no map background file found.")
+                except Exception:
+                    pass
 
     def set_network(self, network):
         self.network = network

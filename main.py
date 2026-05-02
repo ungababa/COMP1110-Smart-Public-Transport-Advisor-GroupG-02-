@@ -1,21 +1,10 @@
-"""
-Smart Public Transport Advisor
-==============================
-
-A text-based Python program that models a small transport network,
-accepts user preferences, generates candidate journeys, and ranks them.
-
-Author: COMP1110 Group Project
-Version: 1.0
-"""
-
 import os
 import sys
 import math
 import xml.etree.ElementTree as ET
 import csv
 import heapq
-from files import Segment, Journey, TransportNetwork, load_network_from_mtr, load_network, load_network_from_light_rail, load_network_from_bus, load_network_from_airport_express, load_network_all
+from files import Segment, Journey, TransportNetwork, load_network, load_network_all
 from collections import deque
 from typing import Callable
 from typing import List, Dict, Tuple, Optional
@@ -40,16 +29,6 @@ RESULT_COLOUR = _rgb(154, 216, 114)
 PROMPT_COLOUR = Fore.WHITE
 
 
-def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Calculate the great circle distance between two points in meters."""
-    R = 6371000  # Earth radius in meters
-    dlat = math.radians(lat2 - lat1)
-    dlon = math.radians(lon2 - lon1)
-    a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2)**2
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
-    return R * c
-
-
 def preference_to_optimization(preference: str) -> str:
     """Map a user preference to the A* optimization mode."""
     if preference in {'duration', 'cost', 'fewest'}:
@@ -59,6 +38,11 @@ def preference_to_optimization(preference: str) -> str:
         'cheapest': 'cost',
         'fewest': 'fewest',
     }.get(preference, 'duration')
+
+# =============================================================================
+# Import data structures and load functions from files.py
+# =============================================================================
+from files import Segment, Journey, TransportNetwork, load_network, load_network_all, haversine_distance
 
 # =============================================================================
 # A* Pathfinding Algorithm
@@ -752,9 +736,5 @@ if __name__ == "__main__":
         print(_c(f"Loaded: {len(network.all_stops)} stops", RESULT_COLOUR))
         print(_c("Starting GUI...", HEADING_COLOUR))
         run_gui(network, fare_lookup)
-
-    # Check if running in batch test mode
-    elif len(sys.argv) > 1 and sys.argv[1] == "--batch":
-        pass
     else:
         main()

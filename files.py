@@ -315,7 +315,9 @@ def get_nearest_bus_stop_for_mtr_station(station: str) -> Optional[str]:
 # =============================================================================
 
 def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Great-circle distance in metres between two lat/lon points."""
+    """Great-circle distance in metres between two lat/lon points. This is used to estimate segment durations when only stop coordinates are available. Used in the A* algorithm
+    Source: https://en.wikipedia.org/wiki/Haversine_formula
+    """
     R = 6371000
     dlat = math.radians(lat2 - lat1)
     dlon = math.radians(lon2 - lon1)
@@ -330,46 +332,36 @@ def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> fl
 # =============================================================================
 
 def load_network_from_mtr() -> Tuple[TransportNetwork, Dict[Tuple[str, str], float], List[str]]:
+    """Load MTR lines, stations, fares, and coordinates."""
     network = TransportNetwork()
-    warnings = []
-
-    stations_file = 'data/mtr/mtr_lines_and_stations.csv'
-    fares_file = 'data/mtr/mtr_lines_fares.csv'
-
-    if not os.path.exists(stations_file):
-        return load_network('data/network.csv')[0], {}, ["Warning: MTR data not found, falling back to network.csv"]
-
+    fare_lookup = {}
     line_sequences = {}
     station_lines = {}
 
     try:
-        with open(stations_file, 'r', encoding='utf-8-sig') as f:
+        with open('data/mtr/mtr_lines_and_stations.csv', 'r', encoding='utf-8-sig') as f:
             reader = csv.DictReader(f)
             for row in reader:
                 line = row.get('Line Code', '').strip()
                 direction = row.get('Direction', '').strip()
                 english = row.get('English Name', '').strip()
                 sequence = row.get('Sequence', '').strip()
-                if not line or not english or not sequence:
-                    continue
-                if 'LMC' in direction:
-                    continue
-                if english not in station_lines:
-                    station_lines[english] = set()
-                station_lines[english].add(line)
-                key = (line, direction)
-                if key not in line_sequences:
-                    line_sequences[key] = []
-                try:
-                    line_sequences[key].append((int(float(sequence)), english))
-                except ValueError:
-                    pass
-    except Exception as e:
-        return load_network('data/network.csv')[0], {}, [f"Warning: Could not read {stations_file}: {str(e)}"]
+                if line and english and sequence and 'LMC' not in direction:
+                    if english not in station_lines:
+                        station_lines[english] = set()
+                    station_lines[english].add(line)
+                    key = (line, direction)
+                    if key not in line_sequences:
+                        line_sequences[key] = []
+                    try:
+                        line_sequences[key].append((int(float(sequence)), english))
+                    except ValueError:
+                        pass
+    except Exception:
+        return network, {}, []
 
-    fare_lookup = {}
     try:
-        with open(fares_file, 'r', encoding='utf-8-sig') as f:
+        with open('data/mtr/mtr_lines_fares.csv', 'r', encoding='utf-8-sig') as f:
             reader = csv.DictReader(f)
             for row in reader:
                 src = row.get('SRC_STATION_NAME', '').strip()
@@ -380,49 +372,24 @@ def load_network_from_mtr() -> Tuple[TransportNetwork, Dict[Tuple[str, str], flo
                         fare_lookup[(src, dest)] = float(std_fare)
                     except ValueError:
                         pass
-    except Exception as e:
-        warnings.append(f"Warning: Could not read fares file: {str(e)}")
+    except Exception:
+        pass
 
-    airport_fares_file = 'data/mtr/airport_express_fares.csv'
     try:
-        with open(airport_fares_file, 'r', encoding='utf-8-sig') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                src = row.get('ST_FROM', '').strip()
-                dest = row.get('ST_TO', '').strip()
-                fare = row.get('SINGLE_ADT_FARE', '').strip()
-                if src and dest and fare:
-                    try:
-                        fare_lookup[(src, dest)] = float(fare)
-                    except ValueError:
-                        pass
-    except Exception as e:
-        warnings.append(f"Warning: Could not read airport fares: {str(e)}")
-
-    # Load MTR station coordinates
-    coords_file = 'data/mtr/mtr_station_coords.csv'
-    loaded_coords = 0
-    try:
-        with open(coords_file, 'r', encoding='utf-8-sig') as f:
+        with open('data/mtr/mtr_station_coords.csv', 'r', encoding='utf-8-sig') as f:
             reader = csv.DictReader(f)
             for row in reader:
                 station = row.get('Station', '').strip()
                 lat_str = row.get('Latitude', '').strip()
                 lon_str = row.get('Longitude', '').strip()
-
                 if station and lat_str and lon_str:
                     try:
-                        lat = float(lat_str)
-                        lon = float(lon_str)
-                        network.set_stop_coords(station, lat, lon)
-                        loaded_coords += 1
+                        network.set_stop_coords(station, float(lat_str), float(lon_str))
                     except ValueError:
                         pass
-    except Exception as e:
-        warnings.append(f"Warning: Could not read MTR coords: {str(e)}")
+    except Exception:
+        pass
 
-    # Typical duration between adjacent stations (in minutes)
-    # Most MTR journeys are 2-4 minutes between stations
     TYPICAL_DURATION = 3
     ael_durations = {
         ('HongKong', 'Kowloon'): 5,
@@ -431,7 +398,6 @@ def load_network_from_mtr() -> Tuple[TransportNetwork, Dict[Tuple[str, str], flo
         ('Airport', 'AsiaWorld-Expo'): 3,
     }
 
-    segments_added = 0
     for (line, direction), stations in line_sequences.items():
         stations_sorted = sorted(stations, key=lambda x: x[0])
         route_id = f"{line}_{direction}"  # Create unique route identifier
@@ -439,246 +405,129 @@ def load_network_from_mtr() -> Tuple[TransportNetwork, Dict[Tuple[str, str], flo
             from_station = stations_sorted[i][1]
             to_station = stations_sorted[i + 1][1]
             fare = fare_lookup.get((from_station, to_station), 5.0)
-            if line == 'AEL':
-                duration = ael_durations.get((from_station, to_station),
-                           ael_durations.get((to_station, from_station), TYPICAL_DURATION))
-            else:
-                duration = TYPICAL_DURATION
-            network.add_segment(Segment(from_station, to_station, duration, fare, mode='MTR', route_id=route_id))
-            segments_added += 1
+            duration = ael_durations.get((from_station, to_station), TYPICAL_DURATION) if line == 'AEL' else TYPICAL_DURATION
+            
+            network.add_segment(Segment(from_station, to_station, duration, fare, mode='MTR'))
             reverse_fare = fare_lookup.get((to_station, from_station), fare)
-            reverse_duration = ael_durations.get((to_station, from_station),
-                               ael_durations.get((from_station, to_station), duration))
-            network.add_segment(Segment(to_station, from_station, reverse_duration, reverse_fare, mode='MTR', route_id=route_id))
-            segments_added += 1
+            reverse_duration = ael_durations.get((to_station, from_station), duration) if line == 'AEL' else TYPICAL_DURATION
+            network.add_segment(Segment(to_station, from_station, reverse_duration, reverse_fare, mode='MTR'))
 
-    if segments_added == 0:
-        net, _, fw = load_network('data/network.csv')
-        return net, {}, ["Warning: No segments created from MTR data, using data/network.csv"] + fw
-
-    warnings.append(f"Loaded {len(network.all_stops)} stops and {segments_added} segments from MTR data")
-
-    return network, fare_lookup, warnings
+    return network, fare_lookup, []
 
 
 def load_network(filename: str) -> Tuple[TransportNetwork, Dict[Tuple[str, str], float], List[str]]:
+    """Load transport network from a simple CSV file."""
     network = TransportNetwork()
-    warnings = []
-
-    if not os.path.exists(filename):
-        return network, {}, [f"Error: File '{filename}' not found."]
-    if os.path.getsize(filename) == 0:
-        return network, {}, [f"Error: File '{filename}' is empty."]
-
+    
     try:
         with open(filename, 'r', encoding='utf-8') as f:
             lines = f.readlines()
-    except Exception as e:
-        return network, {}, [f"Error: Could not read file: {str(e)}"]
-
+    except Exception:
+        return network, {}, []
+    
     if not lines:
-        return network, {}, [f"Error: File '{filename}' is empty."]
-
+        return network, {}, []
+    
     start_idx = 1 if lines[0].strip().lower().startswith('from_stop') else 0
-    valid_count = 0
-
-    for line_num, line in enumerate(lines[start_idx:], start=start_idx + 1):
+    
+    for line in lines[start_idx:]:
         line = line.strip()
         if not line or line.startswith('#'):
             continue
-        parts = [p.strip() for p in line.split(',')]
-        if len(parts) != 4:
-            warnings.append(f"Warning: Line {line_num}: Expected 4 fields, got {len(parts)}. Skipping.")
-            continue
-        from_stop, to_stop, duration_str, cost_str = parts
-        if not from_stop or not to_stop:
-            warnings.append(f"Warning: Line {line_num}: Empty stop name. Skipping.")
-            continue
         try:
+            parts = line.split(',')
+            if len(parts) != 4:
+                continue
+            from_stop, to_stop, duration_str, cost_str = [p.strip() for p in parts]
+            if not from_stop or not to_stop:
+                continue
             duration = int(duration_str)
-            if duration <= 0:
-                warnings.append(f"Warning: Line {line_num}: Duration must be positive. Skipping.")
-                continue
-        except ValueError:
-            warnings.append(f"Warning: Line {line_num}: Invalid duration '{duration_str}'. Skipping.")
-            continue
-        try:
             cost = float(cost_str)
-            if cost < 0:
-                warnings.append(f"Warning: Line {line_num}: Cost cannot be negative. Skipping.")
-                continue
-        except ValueError:
-            warnings.append(f"Warning: Line {line_num}: Invalid cost '{cost_str}'. Skipping.")
+            if duration > 0 and cost >= 0:
+                network.add_segment(Segment(from_stop, to_stop, duration, cost, mode='Other'))
+        except (ValueError, IndexError):
             continue
-        network.add_segment(Segment(from_stop, to_stop, duration, cost, mode='Other'))
-        valid_count += 1
-
-    if valid_count == 0:
-        warnings.append("Error: No valid segments found in file.")
-
-    return network, {}, warnings
+    
+    return network, {}, []
 
 
-def load_network_from_light_rail() -> Tuple[TransportNetwork, Dict[Tuple[str, str], float], List[str]]:
-    network = TransportNetwork()
-    warnings = []
 
-    routes_file = 'data/mtr/light_rail_routes_and_stops.csv'
-    fares_file = 'data/mtr/light_rail_fares.csv'
-
-    if not os.path.exists(routes_file):
-        return network, {}, [f"Warning: {routes_file} not found"]
-
-    id_to_name = {}
-    line_sequences = {}
-
-    try:
-        with open(routes_file, 'r', encoding='utf-8-sig') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                line = row.get('Line Code', '').strip()
-                direction = row.get('Direction', '').strip()
-                stop_id = row.get('Stop ID', '').strip()
-                english = row.get('English Name', '').strip()
-                sequence = row.get('Sequence', '').strip()
-                if not line or not english or not sequence or not stop_id:
-                    continue
-                id_to_name[stop_id] = english
-                key = (line, direction)
-                if key not in line_sequences:
-                    line_sequences[key] = []
-                try:
-                    line_sequences[key].append((int(float(sequence)), stop_id))
-                except ValueError:
-                    pass
-    except Exception as e:
-        return network, {}, [f"Warning: Could not read {routes_file}: {str(e)}"]
-
-    fare_lookup = {}
-    try:
-        with open(fares_file, 'r', encoding='utf-8-sig') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                from_id = row.get('from_station_id', '').strip()
-                to_id = row.get('to_station_id', '').strip()
-                fare = row.get('fare_single_adult', '').strip()
-                if from_id and to_id and fare:
-                    try:
-                        from_name = id_to_name.get(from_id)
-                        to_name = id_to_name.get(to_id)
-                        if from_name and to_name:
-                            fare_lookup[(from_name, to_name)] = float(fare)
-                    except ValueError:
-                        pass
-    except Exception as e:
-        warnings.append(f"Warning: Could not read fares file: {str(e)}")
-
-    TYPICAL_DURATION = 4
-    segments_added = 0
-
-    for (line, direction), stops in line_sequences.items():
-        stops_sorted = sorted(stops, key=lambda x: x[0])
-        route_id = f"{line}_{direction}"  # Create unique route identifier
-        for i in range(len(stops_sorted) - 1):
-            from_id = stops_sorted[i][1]
-            to_id = stops_sorted[i + 1][1]
-            from_station = id_to_name[from_id]
-            to_station = id_to_name[to_id]
-            fare = fare_lookup.get((from_station, to_station), 5.0)
-            network.add_segment(Segment(from_station, to_station, TYPICAL_DURATION, fare, mode='Light Rail', route_id=route_id))
-            segments_added += 1
-            reverse_fare = fare_lookup.get((to_station, from_station), fare)
-            network.add_segment(Segment(to_station, from_station, TYPICAL_DURATION, reverse_fare, mode='Light Rail', route_id=route_id))
-            segments_added += 1
-
-    warnings.append(f"Loaded light rail: {len(network.all_stops)} stops, {segments_added} segments")
-    return network, fare_lookup, warnings
 
 
 def load_network_from_bus() -> Tuple['TransportNetwork', Dict[Tuple[str, str], float], List[str]]:
+    """Load bus network from XML files."""
     network = TransportNetwork()
-    warnings = []
-
-    routes_file = 'data/bus/ROUTE_BUS.xml'
-    stops_file = 'data/bus/RSTOP_BUS.xml'
-    coords_file = 'data/bus/STOP_BUS.xml'
-
-    if not os.path.exists(stops_file):
-        return network, {}, [f"Warning: {stops_file} not found"]
-
-    # Load route info: journey_time and full_fare keyed by route_id
     route_info = {}
+    route_sequences = {}
+    stop_names = {}
+    stop_id_coords = {}
+    stop_coords = {}
+
     try:
-        tree = ET.parse(routes_file)
+        tree = ET.parse('data/bus/ROUTE_BUS.xml')
         root = tree.getroot()
         for route in root.findall('ROUTE'):
-            route_id = route.find('ROUTE_ID').text
-            jt = route.find('JOURNEY_TIME')
-            ff = route.find('FULL_FARE')
-            rn = route.find('ROUTE_NAMEE')
-            cc = route.find('COMPANY_CODE')
-            route_info[route_id] = {
-                'journey_time': int(jt.text) if jt is not None and jt.text else None,
-                'full_fare': float(ff.text) if ff is not None and ff.text else 5.0,
-                'route_name': rn.text if rn is not None and rn.text else 'Unknown',
-                'operator': cc.text if cc is not None and cc.text else 'Unknown'
-            }
-    except Exception as e:
-        warnings.append(f"Warning: Could not read {routes_file}: {str(e)}")
+            try:
+                route_id = route.find('ROUTE_ID').text
+                jt = route.find('JOURNEY_TIME')
+                ff = route.find('FULL_FARE')
+                route_info[route_id] = {
+                    'journey_time': int(jt.text) if jt is not None and jt.text else None,
+                    'full_fare': float(ff.text) if ff is not None and ff.text else 5.0
+                }
+            except (ValueError, AttributeError):
+                pass
+    except Exception:
+        pass
 
-    # Load stop sequences grouped by (route_id, route_seq/direction)
-    # CRITICAL: must group by ROUTE_SEQ too, otherwise both directions
-    # get mixed into one sequence, doubling total distance and breaking durations
-    route_sequences = {}  # (route_id, route_seq) -> list of (stop_seq, stop_name, stop_id)
-    stop_names = {}       # stop_id -> stop_name
     try:
-        tree = ET.parse(stops_file)
+        tree = ET.parse('data/bus/RSTOP_BUS.xml')
         root = tree.getroot()
         for rstop in root.findall('RSTOP'):
-            route_id = rstop.find('ROUTE_ID').text
-            route_seq = rstop.find('ROUTE_SEQ').text   # direction (1 or 2)
-            stop_seq = int(rstop.find('STOP_SEQ').text)
-            stop_id = rstop.find('STOP_ID').text
-            stop_name = rstop.find('STOP_NAMEE').text.strip()
-            stop_names[stop_id] = stop_name
-            key = (route_id, route_seq)
-            if key not in route_sequences:
-                route_sequences[key] = []
-            route_sequences[key].append((stop_seq, stop_name, stop_id))
-    except Exception as e:
-        warnings.append(f"Warning: Could not read {stops_file}: {str(e)}")
+            try:
+                route_id = rstop.find('ROUTE_ID').text
+                route_seq = rstop.find('ROUTE_SEQ').text
+                stop_seq = int(rstop.find('STOP_SEQ').text)
+                stop_id = rstop.find('STOP_ID').text
+                stop_name = rstop.find('STOP_NAMEE').text.strip()
+                stop_names[stop_id] = stop_name
+                key = (route_id, route_seq)
+                if key not in route_sequences:
+                    route_sequences[key] = []
+                route_sequences[key].append((stop_seq, stop_name, stop_id))
+            except (ValueError, AttributeError):
+                pass
+    except Exception:
+        pass
 
-    # Load stop coordinates keyed by stop_id (NOT name — multiple stops share names)
-    stop_id_coords = {}  # stop_id -> (lat, lon)
-    stop_coords = {}     # stop_name -> (lat, lon) for network.set_stop_coords
     try:
-        tree = ET.parse(coords_file)
+        tree = ET.parse('data/bus/STOP_BUS.xml')
         root = tree.getroot()
         for stop in root.findall('STOP'):
-            stop_id = stop.find('STOP_ID').text
-            x_elem = stop.find('X')
-            y_elem = stop.find('Y')
-            if x_elem is not None and y_elem is not None and x_elem.text and y_elem.text:
-                lat = float(x_elem.text)  # X = latitude
-                lon = float(y_elem.text)  # Y = longitude
-                stop_id_coords[stop_id] = (lat, lon)
-                name = stop_names.get(stop_id)
-                if name:
-                    stop_coords[name] = (lat, lon)
-    except Exception as e:
-        warnings.append(f"Warning: Could not read {coords_file}: {str(e)}")
+            try:
+                stop_id = stop.find('STOP_ID').text
+                x_elem = stop.find('X')
+                y_elem = stop.find('Y')
+                if x_elem is not None and y_elem is not None and x_elem.text and y_elem.text:
+                    lat = float(x_elem.text)
+                    lon = float(y_elem.text)
+                    stop_id_coords[stop_id] = (lat, lon)
+                    name = stop_names.get(stop_id)
+                    if name:
+                        stop_coords[name] = (lat, lon)
+            except (ValueError, AttributeError):
+                pass
+    except Exception:
+        pass
 
-    FALLBACK_DURATION = 3  # only used when coords are genuinely missing
-
-    segments_added = 0
+    FALLBACK_DURATION = 3
 
     for (route_id, route_seq), stops in route_sequences.items():
         stops_sorted = sorted(stops, key=lambda x: x[0])
         info = route_info.get(route_id, {})
         fare = info.get('full_fare', 5.0)
-        total_journey_time = info.get('journey_time', None)
-
-        # Pass 1: compute segment distances using stop_id coords (haversine)
+        total_journey_time = info.get('journey_time')
+        
         total_route_distance = 0.0
         segment_distances = []
 
@@ -687,137 +536,51 @@ def load_network_from_bus() -> Tuple['TransportNetwork', Dict[Tuple[str, str], f
             sid2 = stops_sorted[i + 1][2]
             c1 = stop_id_coords.get(sid1)
             c2 = stop_id_coords.get(sid2)
-
-            if c1 and c2:
-                dist = haversine_distance(c1[0], c1[1], c2[0], c2[1])
-            else:
-                dist = None
-
+            dist = haversine_distance(c1[0], c1[1], c2[0], c2[1]) if c1 and c2 else None
             segment_distances.append(dist)
             if dist is not None:
                 total_route_distance += dist
 
-        # Pass 2: build segments with duration proportional to distance
         for i in range(len(stops_sorted) - 1):
             from_station = stops_sorted[i][1]
             to_station = stops_sorted[i + 1][1]
             dist = segment_distances[i]
 
-            if (dist is not None and
-                    total_route_distance > 0 and
-                    total_journey_time is not None and
-                    total_journey_time > 0):
+            if dist and total_route_distance > 0 and total_journey_time and total_journey_time > 0:
                 duration = max(1, round(dist * total_journey_time / total_route_distance))
             else:
                 duration = FALLBACK_DURATION
 
-            route_name = info.get('route_name', 'Unknown')
-            operator = info.get('operator', 'Unknown')
+            network.add_segment(Segment(from_station, to_station, duration, fare, mode='Bus'))
+            network.add_segment(Segment(to_station, from_station, duration, fare, mode='Bus'))
 
-            segment = Segment(from_station, to_station, duration, fare, mode='Bus', route_id=route_id, route_name=route_name, operator=operator)
-            network.add_segment(segment)
-            segments_added += 1
-
-            reverse_segment = Segment(to_station, from_station, duration, fare, mode='Bus', route_id=route_id, route_name=route_name, operator=operator)
-            network.add_segment(reverse_segment)
-            segments_added += 1
-
-    # Store coords in network for A* heuristic
     for stop_name, (lat, lon) in stop_coords.items():
         network.set_stop_coords(stop_name, lat, lon)
 
-    warnings.append(
-        f"Loaded bus: {len(stop_coords)} bus stops, {segments_added} bus segments"
-    )
-    return network, {}, warnings
-
-
-def load_network_from_airport_express() -> Tuple[TransportNetwork, Dict[Tuple[str, str], float], List[str]]:
-    network = TransportNetwork()
-    warnings = []
-
-    fares_file = 'data/mtr/airport_express_fares.csv'
-    if not os.path.exists(fares_file):
-        return network, {}, [f"Warning: {fares_file} not found"]
-
-    fare_lookup = {}
-    stations = set()
-
-    try:
-        with open(fares_file, 'r', encoding='utf-8-sig') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                from_station = row.get('ST_FROM', '').strip()
-                to_station = row.get('ST_TO', '').strip()
-                fare = row.get('SINGLE_ADT_FARE', '').strip()
-                if from_station and to_station and fare:
-                    stations.add(from_station)
-                    stations.add(to_station)
-                    try:
-                        fare_lookup[(from_station, to_station)] = float(fare)
-                    except ValueError:
-                        pass
-    except Exception as e:
-        return network, {}, [f"Warning: Could not read {fares_file}: {str(e)}"]
-
-    duration_lookup = {
-        ('HongKong', 'Kowloon'): 5,
-        ('HongKong', 'Tsing Yi'): 12,
-        ('HongKong', 'Airport'): 24,
-        ('HongKong', 'AsiaWorld-Expo'): 24,
-        ('Kowloon', 'Tsing Yi'): 7,
-        ('Kowloon', 'Airport'): 20,
-        ('Kowloon', 'AsiaWorld-Expo'): 20,
-        ('Tsing Yi', 'Airport'): 12,
-        ('Tsing Yi', 'AsiaWorld-Expo'): 12,
-        ('Airport', 'AsiaWorld-Expo'): 3,
-    }
-
-    segments_added = 0
-    for from_station in stations:
-        for to_station in stations:
-            if from_station != to_station:
-                fare = fare_lookup.get((from_station, to_station), 100.0)
-                duration = duration_lookup.get((from_station, to_station),
-                           duration_lookup.get((to_station, from_station), 10))
-                network.add_segment(Segment(from_station, to_station, duration, fare, mode='Airport Express', route_id='Airport Express', route_name='Airport Express', operator='Airport Express'))
-                segments_added += 1
-
-    warnings.append(f"Loaded airport express: {len(network.all_stops)} stops, {segments_added} segments")
-    return network, fare_lookup, warnings
+    return network, {}, []
 
 
 def load_network_all() -> Tuple[TransportNetwork, Dict[Tuple[str, str], float], List[str]]:
-    """Loads complete transport network from all available data sources."""
+    """Load complete transport network from all available sources."""
     network = TransportNetwork()
     fare_lookup = {}
-    all_warnings = []
 
     loaders = [
-        ('mtr', load_network_from_mtr),
-        ('light_rail', load_network_from_light_rail),
-        ('bus', load_network_from_bus),
+        load_network_from_mtr,
+        load_network_from_bus,
     ]
 
-    for name, loader in loaders:
+    for loader in loaders:
         try:
-            sub_network, sub_fare_lookup, warnings = loader()
-            all_warnings.extend(warnings)
+            sub_network, sub_fare_lookup, _ = loader()
             for stop, segments in sub_network.stops.items():
                 for segment in segments:
                     network.add_segment(segment)
             fare_lookup.update(sub_fare_lookup)
-            # Merge coordinates for A* heuristic
             for stop_name, coords in sub_network.stop_coords.items():
                 if stop_name not in network.stop_coords:
                     network.set_stop_coords(stop_name, coords[0], coords[1])
-        except Exception as e:
-            all_warnings.append(f"Error loading {name}: {str(e)}")
+        except Exception:
+            pass
 
-    # Treat mapped MTR stations and their nearest bus stops as equivalent nodes
-    for mtr_station, bus_stop in MTR_NEAREST_BUS_STOP.items():
-        if mtr_station in network.all_stops and bus_stop in network.all_stops:
-            network.add_alias(mtr_station, bus_stop)
-
-    all_warnings.append(f"Total network: {len(network.all_stops)} stops, {network.get_num_segments()} segments")
-    return network, fare_lookup, all_warnings
+    return network, fare_lookup, []

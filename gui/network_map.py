@@ -15,9 +15,6 @@ from PyQt6.QtGui import QPen, QBrush, QColor, QFont, QPainter
 MODE_COLORS = {
     'MTR': QColor(0, 100, 200),           # Blue
     'Bus': QColor(0, 150, 50),            # Green
-    'Light Rail': QColor(200, 100, 0),    # Orange/Brown
-    'Walk': QColor(100, 100, 100),        # Gray
-    'Airport Express': QColor(150, 0, 150), # Purple
 }
 
 
