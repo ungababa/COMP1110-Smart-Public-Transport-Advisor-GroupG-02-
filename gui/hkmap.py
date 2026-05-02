@@ -367,11 +367,12 @@ class HKMapWidget(QWidget):
         for label, tip, slot in [
             ("+", "Zoom in  (or scroll ↑)",  self._zoom_in),
             ("−", "Zoom out (or scroll ↓)",  self._zoom_out),
-            ("⊡", "Reset view",              self._reset_view),
+            ("↺", "Reset view",              self._reset_view),
         ]:
             btn = QPushButton(label)
-            btn.setFixedSize(28, 28)
+            btn.setFixedSize(35, 35)
             btn.setToolTip(tip)
+            btn.setStyleSheet("font-size: 20px; font-weight: bold;")
             btn.clicked.connect(slot)
             header.addWidget(btn)
 
@@ -401,11 +402,7 @@ class HKMapWidget(QWidget):
         root = Path(__file__).parent.parent
         candidates = [
             Path('Hong_Kong_Dark_Map.png'),
-            root / 'Hong_Kong_Dark_Map.png',
-            Path('Hong_Kong_Base_Map.png'),
-            root / 'Hong_Kong_Base_Map.png',
-            Path('data/Hong_Kong_Base_Map.png'),
-            root / 'data' / 'Hong_Kong_Base_Map.png',
+            root / 'data' / 'Hong_Kong_Dark_Map.png',
         ]
         for candidate in candidates:
             if candidate.exists():
