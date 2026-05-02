@@ -1,56 +1,16 @@
+from_stop,to_stop,duration,cost
 HKU,QMH,3,4.00
-HKU,Cyberport,7,6.00
-HKU,Wah Fu,12,8.00
-HKU,Wah Kwai,16,11.00
-HKU,Tin Wan,20,13.00
-HKU,Aberdeen,25,15.00
-HKU,Wong Chuk Hang,31,17.00
-QMH,HKU,3,4.00
 QMH,Cyberport,4,6.00
-QMH,Wah Fu,9,8.00
-QMH,Wah Kwai,13,11.00
-QMH,Tin Wan,17,13.00
-QMH,Aberdeen,22,15.00
-QMH,Wong Chuk Hang,28,17.00
-Cyberport,HKU,7,6.00
-Cyberport,QMH,4,6.00
 Cyberport,Wah Fu,5,8.00
-Cyberport,Wah Kwai,9,11.00
-Cyberport,Tin Wan,13,13.00
-Cyberport,Aberdeen,18,15.00
-Cyberport,Wong Chuk Hang,24,17.00
-Wah Fu,HKU,12,8.00
-Wah Fu,QMH,9,8.00
+Wah Fu,Wah Kwai,4,8.00
+Wah Kwai,Tin Wan,4,10.00
+Tin Wan,Aberdeen,5,12.00
+Aberdeen,Wong Chuk Hang,6,14.00
+# Reverse direction
+QMH,HKU,3,4.00
+Cyberport,QMH,4,6.00
 Wah Fu,Cyberport,5,8.00
-Wah Fu,Wah Kwai,4,11.00
-Wah Fu,Tin Wan,8,13.00
-Wah Fu,Aberdeen,13,15.00
-Wah Fu,Wong Chuk Hang,19,17.00
-Wah Kwai,HKU,16,11.00
-Wah Kwai,QMH,13,11.00
-Wah Kwai,Cyberport,9,11.00
-Wah Kwai,Wah Fu,4,11.00
-Wah Kwai,Tin Wan,4,13.00
-Wah Kwai,Aberdeen,9,15.00
-Wah Kwai,Wong Chuk Hang,15,17.00
-Tin Wan,HKU,20,13.00
-Tin Wan,QMH,17,13.00
-Tin Wan,Cyberport,13,13.00
-Tin Wan,Wah Fu,8,13.00
-Tin Wan,Wah Kwai,4,13.00
-Tin Wan,Aberdeen,5,15.00
-Tin Wan,Wong Chuk Hang,11,17.00
-Aberdeen,HKU,25,15.00
-Aberdeen,QMH,22,15.00
-Aberdeen,Cyberport,18,15.00
-Aberdeen,Wah Fu,13,15.00
-Aberdeen,Wah Kwai,9,15.00
-Aberdeen,Tin Wan,5,15.00
-Aberdeen,Wong Chuk Hang,6,17.00
-Wong Chuk Hang,HKU,31,17.00
-Wong Chuk Hang,QMH,28,17.00
-Wong Chuk Hang,Cyberport,24,17.00
-Wong Chuk Hang,Wah Fu,19,17.00
-Wong Chuk Hang,Wah Kwai,15,17.00
-Wong Chuk Hang,Tin Wan,11,17.00
-Wong Chuk Hang,Aberdeen,6,17.00
+Wah Kwai,Wah Fu,4,8.00
+Tin Wan,Wah Kwai,4,10.00
+Aberdeen,Tin Wan,5,12.00
+Wong Chuk Hang,Aberdeen,6,14.00

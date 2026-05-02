@@ -21,6 +21,7 @@ MODE_COLORS = {
     'Light Rail':     QColor(200, 100, 0),
     'Walk':           QColor(100, 100, 100),
     'Airport Express':QColor(150, 0, 150),
+    'Custom':        QColor(200, 100, 200),  # Purple for custom stops
 }
 
 # ── MTR station coordinates (WGS84) ──────────────────────────────────────────
@@ -462,7 +463,7 @@ class HKMapWidget(QWidget):
 
                 size = 14
                 ellipse = QGraphicsEllipseItem(x - size/2, y - size/2, size, size)
-                ellipse.setBrush(QBrush(MODE_COLORS['Bus']))
+                ellipse.setBrush(QBrush(MODE_COLORS['Custom']))
                 ellipse.setPen(QPen(Qt.GlobalColor.white, 2))
                 ellipse.setZValue(1)
                 ellipse.setToolTip(stop)
@@ -516,11 +517,18 @@ class HKMapWidget(QWidget):
             from_pos = self.stop_positions.get(seg.from_stop)
             to_pos   = self.stop_positions.get(seg.to_stop)
 
-            # Fall back to bus stop positions if not an MTR station
+            # Fall back to bus/custom stop positions
             if from_pos is None and seg.from_stop in self.bus_stop_name_positions:
                 from_pos = self.bus_stop_name_positions[seg.from_stop]
             if to_pos is None and seg.to_stop in self.bus_stop_name_positions:
                 to_pos = self.bus_stop_name_positions[seg.to_stop]
+            # Fall back to custom coordinates
+            if from_pos is None and self.custom_coords and seg.from_stop in self.custom_coords:
+                lat, lon = self.custom_coords[seg.from_stop]
+                from_pos = map_range(lat, lon)
+            if to_pos is None and self.custom_coords and seg.to_stop in self.custom_coords:
+                lat, lon = self.custom_coords[seg.to_stop]
+                to_pos = map_range(lat, lon)
 
             if from_pos:
                 all_journey_positions[seg.from_stop] = from_pos
@@ -547,12 +555,13 @@ class HKMapWidget(QWidget):
         # Draw dots + labels for every stop in the journey
         for stop_name, (x, y) in all_journey_positions.items():
             is_mtr = stop_name in STATION_COORDS
+            is_custom = self.custom_coords and stop_name in self.custom_coords
 
             # Highlight dot — white fill with a coloured ring
-            size = 16 if is_mtr else 11
+            size = 16 if is_mtr else (13 if is_custom else 11)
             ellipse = QGraphicsEllipseItem(x - size/2, y - size/2, size, size)
             ellipse.setBrush(QBrush(QColor(255, 255, 255)))          # white fill
-            ring_color = QColor(255, 210, 50) if is_mtr else QColor(255, 140, 0)
+            ring_color = QColor(255, 210, 50) if is_mtr else (QColor(200, 100, 200) if is_custom else QColor(255, 140, 0))
             ellipse.setPen(QPen(ring_color, 3))
             ellipse.setZValue(3)
             self.scene.addItem(ellipse)

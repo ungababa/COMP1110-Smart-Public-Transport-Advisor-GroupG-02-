@@ -427,11 +427,8 @@ def load_network_from_mtr() -> Tuple[TransportNetwork, Dict[Tuple[str, str], flo
             to_station = stations_sorted[i + 1][1]
             fare = fare_lookup.get((from_station, to_station), 5.0)
             duration = ael_durations.get((from_station, to_station), TYPICAL_DURATION) if line == 'AEL' else TYPICAL_DURATION
-<<<<<<< HEAD
 
-=======
             
->>>>>>> b7e8e111f00c7ad62928d007aa106ae48f6a9320
             network.add_segment(Segment(from_station, to_station, duration, fare, mode='MTR', route_id=route_id))
             reverse_fare = fare_lookup.get((to_station, from_station), fare)
             reverse_duration = ael_durations.get((to_station, from_station), duration) if line == 'AEL' else TYPICAL_DURATION
@@ -682,7 +679,7 @@ def load_custom_data(merge: bool = False) -> Tuple[TransportNetwork, Dict[Tuple[
                 duration = int(duration_str)
                 cost = float(cost_str)
                 if duration > 0 and cost >= 0:
-                    network.add_segment(Segment(from_stop, to_stop, duration, cost, mode='Bus'))
+                    network.add_segment(Segment(from_stop, to_stop, duration, cost, mode='Custom'))
                     fare_lookup[(from_stop, to_stop)] = cost
                     file_count += 1
             except (ValueError, IndexError):
