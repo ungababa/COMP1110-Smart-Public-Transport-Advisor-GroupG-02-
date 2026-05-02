@@ -152,7 +152,12 @@ class _LegWidget(QWidget):
         origin      = segs[0].from_stop
         dest        = segs[-1].to_stop
         total_dur   = sum(s.duration for s in segs)
-        total_cost  = sum(s.cost for s in segs)
+        # Continuous same-route legs should show one journey fare,
+        # not the sum of per-stop segment fares.
+        if segs[0].route_id is not None:
+            total_cost = segs[0].cost
+        else:
+            total_cost = sum(s.cost for s in segs)
         stops_count = len(segs) + 1          # stations touched (including endpoints)
         expandable  = stops_count > 2
 
