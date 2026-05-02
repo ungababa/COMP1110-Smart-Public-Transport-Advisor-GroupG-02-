@@ -487,15 +487,58 @@ def display_journeys(journeys: List[Journey], origin: str, destination: str,
         print(f"\n{_c('--- Journey', HEADING_COLOUR)} {_c(str(i), HEADING_COLOUR)} {_c('---', HEADING_COLOUR)}")
         print(f"  {_c('Duration:', Fore.YELLOW)} {_c(str(journey.total_duration) + ' minutes', RESULT_COLOUR)}")
         print(f"  {_c('Cost:', Fore.YELLOW)} {_c(f'${journey.total_cost:.2f} HKD', RESULT_COLOUR)}")
-        print(f"  {_c('Segments:', Fore.YELLOW)} {_c(str(journey.num_segments), RESULT_COLOUR)}")
         print(f"  {_c('Route:', HEADING_COLOUR)}")
 
-        for j, segment in enumerate(journey.segments, 1):
-            bus_info = ""
-            if segment.mode_of_transport == 'Bus' and segment.route_name:
-                bus_info = f" {_c('[Bus', HEADING_COLOUR)} {segment.route_name} {segment.operator} {_c(']', HEADING_COLOUR)}"
-            seg_line = f"    {j}. {segment.from_stop} -> {segment.to_stop} ({segment.duration}min, ${segment.cost:.2f}) [{segment.mode_of_transport}]"
-            print(_c(f"    {j}.", Fore.YELLOW), _c(f"{segment.from_stop} -> {segment.to_stop} ({segment.duration}min, ${segment.cost:.2f}) [{segment.mode_of_transport}]", RESULT_COLOUR) + bus_info)
+        # Group segments into legs (consecutive segments with same route_id + mode)
+        legs = []
+        if journey.segments:
+            current_leg = [journey.segments[0]]
+            for seg in journey.segments[1:]:
+                prev = current_leg[-1]
+                same_route = (
+                    seg.mode_of_transport == prev.mode_of_transport
+                    and (
+                        (seg.route_id is not None and seg.route_id == prev.route_id)
+                        or (seg.route_name and seg.route_name == prev.route_name)
+                    )
+                )
+                if same_route:
+                    current_leg.append(seg)
+                else:
+                    legs.append(current_leg)
+                    current_leg = [seg]
+            legs.append(current_leg)
+
+        # Display each leg
+        for leg_idx, leg in enumerate(legs, 1):
+            first_seg = leg[0]
+            last_seg = leg[-1]
+            
+            mode = first_seg.mode_of_transport
+            route_display = mode
+            
+            # Add specific route/line name
+            if mode == 'Bus' and first_seg.route_name:
+                route_display = f"Bus {first_seg.route_name}"
+            elif mode == 'MTR' and first_seg.route_id:
+                code = first_seg.route_id.split('_')[0]
+                mtr_names = {
+                    'ISL': 'Island Line', 'TWL': 'Tsuen Wan Line', 'KTL': 'Kwun Tong Line',
+                    'TML': 'Tuen Ma Line', 'EAL': 'East Rail Line', 'SIL': 'South Island Line',
+                    'TCL': 'Tung Chung Line', 'AEL': 'Airport Express', 'DRL': 'Disneyland Resort Line',
+                    'MOL': 'Ma On Shan Line',
+                }
+                route_display = mtr_names.get(code, code)
+            elif mode == 'Light Rail' and first_seg.route_id:
+                route_display = f"Light Rail {first_seg.route_id}"
+            
+            leg_duration = sum(s.duration for s in leg)
+            leg_cost = first_seg.cost
+            
+            print(_c(f"    {leg_idx}.", Fore.YELLOW), 
+                  _c(f"{first_seg.from_stop} → {last_seg.to_stop}", RESULT_COLOUR),
+                  _c(f"({leg_duration}min, ${leg_cost:.2f})", Fore.CYAN),
+                  _c(f"[{route_display}]", HEADING_COLOUR))
 
         print()
 

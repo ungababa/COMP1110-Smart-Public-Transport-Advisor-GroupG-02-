@@ -406,11 +406,11 @@ def load_network_from_mtr() -> Tuple[TransportNetwork, Dict[Tuple[str, str], flo
             to_station = stations_sorted[i + 1][1]
             fare = fare_lookup.get((from_station, to_station), 5.0)
             duration = ael_durations.get((from_station, to_station), TYPICAL_DURATION) if line == 'AEL' else TYPICAL_DURATION
-            
-            network.add_segment(Segment(from_station, to_station, duration, fare, mode='MTR'))
+
+            network.add_segment(Segment(from_station, to_station, duration, fare, mode='MTR', route_id=route_id))
             reverse_fare = fare_lookup.get((to_station, from_station), fare)
             reverse_duration = ael_durations.get((to_station, from_station), duration) if line == 'AEL' else TYPICAL_DURATION
-            network.add_segment(Segment(to_station, from_station, reverse_duration, reverse_fare, mode='MTR'))
+            network.add_segment(Segment(to_station, from_station, reverse_duration, reverse_fare, mode='MTR', route_id=route_id))
 
     return network, fare_lookup, []
 
@@ -418,18 +418,18 @@ def load_network_from_mtr() -> Tuple[TransportNetwork, Dict[Tuple[str, str], flo
 def load_network(filename: str) -> Tuple[TransportNetwork, Dict[Tuple[str, str], float], List[str]]:
     """Load transport network from a simple CSV file."""
     network = TransportNetwork()
-    
+
     try:
         with open(filename, 'r', encoding='utf-8') as f:
             lines = f.readlines()
     except Exception:
         return network, {}, []
-    
+
     if not lines:
         return network, {}, []
-    
+
     start_idx = 1 if lines[0].strip().lower().startswith('from_stop') else 0
-    
+
     for line in lines[start_idx:]:
         line = line.strip()
         if not line or line.startswith('#'):
@@ -447,12 +447,8 @@ def load_network(filename: str) -> Tuple[TransportNetwork, Dict[Tuple[str, str],
                 network.add_segment(Segment(from_stop, to_stop, duration, cost, mode='Other'))
         except (ValueError, IndexError):
             continue
-    
+
     return network, {}, []
-
-
-
-
 
 def load_network_from_bus() -> Tuple['TransportNetwork', Dict[Tuple[str, str], float], List[str]]:
     """Load bus network from XML files."""
