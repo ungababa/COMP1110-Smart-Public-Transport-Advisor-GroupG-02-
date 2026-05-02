@@ -14,110 +14,10 @@ from PyQt6.QtCore import Qt, pyqtSignal, QRectF
 from PyQt6.QtGui import QPen, QBrush, QColor, QPainter, QPixmap, QFont
 
 
-# ── Transport mode colours ────────────────────────────────────────────────────
 MODE_COLORS = {
     'MTR':  QColor(0, 100, 200),
     'Bus':  QColor(0, 150, 50),
     'Walk': QColor(100, 100, 100),
-}
-
-# ── MTR station coordinates (WGS84) ──────────────────────────────────────────
-# Corrected coordinates verified against official MTR map
-STATION_COORDS = {
-    'Admiralty':          (22.2794, 114.1651),
-    'Airport':            (22.3160, 113.9366),
-    'AsiaWorld-Expo':     (22.3218, 113.9412),
-    'Austin':             (22.3046, 114.1670),
-    'Causeway Bay':       (22.2802, 114.1835),
-    'Central':            (22.2820, 114.1576),
-    'Chai Wan':           (22.2644, 114.2368),
-    'Che Kung Temple':    (22.3748, 114.1861),
-    'Cheung Sha Wan':     (22.3354, 114.1563),
-    'Choi Hung':          (22.3348, 114.2089),
-    'City One':           (22.3828, 114.2035),
-    'Diamond Hill':       (22.3401, 114.2016),
-    'Disneyland Resort':  (22.3155, 114.0451),
-    'East Tsim Sha Tsui': (22.2955, 114.1754),
-    'Fanling':            (22.4921, 114.1387),
-    'Fo Tan':             (22.3953, 114.1982),
-    'Fortress Hill':      (22.2881, 114.1936),
-    'HKU':                (22.2841, 114.1354),
-    'Hang Hau':           (22.3156, 114.2644),
-    'Heng Fa Chuen':      (22.2769, 114.2398),
-    'Heng On':            (22.4174, 114.2258),
-    'Hin Keng':           (22.3640, 114.1708),
-    'Ho Man Tin':         (22.3093, 114.1829),
-    'Hong Kong':          (22.2850, 114.1580),
-    'Hung Hom':           (22.3029, 114.1816),
-    'Jordan':             (22.3049, 114.1718),
-    'Kai Tak':            (22.3304, 114.1994),
-    'Kam Sheung Road':    (22.4348, 114.0634),
-    'Kennedy Town':       (22.2815, 114.1283),
-    'Kowloon Bay':        (22.3235, 114.2141),
-    'Kowloon Tong':       (22.3370, 114.1762),
-    'Kowloon':            (22.3049, 114.1615),
-    'Kwai Fong':          (22.3569, 114.1279),
-    'Kwai Hing':          (22.3632, 114.1312),
-    'Kwun Tong':          (22.3121, 114.2265),
-    'LOHAS Park':         (22.2957, 114.2689),
-    'Lai Chi Kok':        (22.3373, 114.1482),
-    'Lai King':           (22.3484, 114.1261),
-    'Lam Tin':            (22.3068, 114.2330),
-    'Lei Tung':           (22.2421, 114.1562),
-    'Lo Wu':              (22.5283, 114.1134),
-    'Lok Fu':             (22.3380, 114.1871),
-    'Lok Ma Chau':        (22.5144, 114.0657),
-    'Long Ping':          (22.4477, 114.0253),
-    'Ma On Shan':         (22.4247, 114.2316),
-    'Mei Foo':            (22.3381, 114.1376),
-    'Mong Kok East':      (22.3222, 114.1728),
-    'Mong Kok':           (22.3191, 114.1694),
-    'Nam Cheong':         (22.3268, 114.1533),
-    'Ngau Tau Kok':       (22.3154, 114.2193),
-    'North Point':        (22.2909, 114.2007),
-    'Ocean Park':         (22.2486, 114.1743),
-    'Olympic':            (22.3178, 114.1602),
-    'Po Lam':             (22.3224, 114.2580),
-    'Prince Edward':      (22.3245, 114.1683),
-    'Quarry Bay':         (22.2878, 114.2096),
-    'Sai Wan Ho':         (22.2816, 114.2224),
-    'Sai Ying Pun':       (22.2856, 114.1430),
-    'Sha Tin Wai':        (22.3771, 114.1950),
-    'Sha Tin':            (22.3825, 114.1875),
-    'Sham Shui Po':       (22.3307, 114.1623),
-    'Shau Kei Wan':       (22.2789, 114.2289),
-    'Shek Kip Mei':       (22.3320, 114.1687),
-    'Shek Mun':           (22.3877, 114.2083),
-    'Sheung Shui':        (22.5012, 114.1280),
-    'Sheung Wan':         (22.2862, 114.1518),
-    'Siu Hong':           (22.4120, 113.9786),
-    'South Horizons':     (22.2425, 114.1491),
-    'Sunny Bay':          (22.3318, 114.0288),
-    'Tai Koo':            (22.2846, 114.2161),
-    'Tai Po Market':      (22.4446, 114.1706),
-    'Tai Shui Hang':      (22.4088, 114.2230),
-    'Tai Wai':            (22.3731, 114.1786),
-    'Tai Wo Hau':         (22.3708, 114.1250),
-    'Tai Wo':             (22.4511, 114.1611),
-    'Tin Hau':            (22.2827, 114.1917),
-    'Tin Shui Wai':       (22.4481, 114.0046),
-    'Tiu Keng Leng':      (22.3042, 114.2524),
-    'Tseung Kwan O':      (22.3074, 114.2600),
-    'Tsim Sha Tsui':      (22.2973, 114.1722),
-    'Tsing Yi':           (22.3584, 114.1070),
-    'Tsuen Wan West':     (22.3686, 114.1098),
-    'Tsuen Wan':          (22.3736, 114.1178),
-    'Tuen Mun':           (22.3952, 113.9731),
-    'Tung Chung':         (22.2893, 113.9416),
-    'University':         (22.4134, 114.2102),
-    'Wan Chai':           (22.2773, 114.1728),
-    'Whampo':             (22.3050, 114.1896),
-    'Wong Chuk Hang':     (22.2480, 114.1681),
-    'Wong Tai Sin':       (22.3417, 114.1939),
-    'Wu Kai Sha':         (22.4291, 114.2438),
-    'Yau Ma Tei':         (22.3129, 114.1707),
-    'Yau Tong':           (22.2979, 114.2371),
-    'Yuen Long':          (22.4461, 114.0352),
 }
 
 # ── Map geometry ──────────────────────────────────────────────────────────────
@@ -430,10 +330,11 @@ class HKMapWidget(QWidget):
         mtr_count = 0
         important_bus_count = 0
 
-        # MTR stations
+        # Render all stops with available coordinates
         for stop in self.network.all_stops:
-            if stop in STATION_COORDS:
-                lat, lon = STATION_COORDS[stop]
+            coords = self.network.get_stop_coords(stop)
+            if coords:
+                lat, lon = coords
                 x, y = map_range(lat, lon)
                 self.stop_positions[stop] = (x, y)
 
@@ -542,8 +443,9 @@ class HKMapWidget(QWidget):
         placed_rects: list = []   # QRectF of each committed label pill
 
         for stop_name, (x, y) in all_journey_positions.items():
-            is_mtr        = stop_name in STATION_COORDS
-            should_label  = stop_name in label_stops
+            coords = self.network.get_stop_coords(stop_name)
+            is_mtr = coords is not None
+            should_label = stop_name in label_stops
 
             # Highlight dot — white fill with a coloured ring
             # Interchange/endpoint dots are slightly larger for emphasis
