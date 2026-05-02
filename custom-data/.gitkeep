@@ -1,0 +1,2 @@
+# This folder is for custom transport network CSV files
+# Place your CSV files here following the format: from_stop,to_stop,duration,cost

@@ -1,0 +1,4 @@
+from_stop,to_stop,duration,cost
+Central,Admiralty,2,5.5
+Admiralty,Wan Chai,3,5.5
+Wan Chai,Causeway Bay,2,5.5

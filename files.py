@@ -602,3 +602,77 @@ def load_network_all() -> Tuple[TransportNetwork, Dict[Tuple[str, str], float], 
             pass
 
     return network, fare_lookup, []
+
+
+def load_custom_data(merge: bool = False) -> Tuple[TransportNetwork, Dict[Tuple[str, str], float], List[str]]:
+    """Load custom network data from custom-data/ folder.
+    
+    Args:
+        merge: If True, merge with existing network. If False, replace it.
+    
+    Returns:
+        (network, fare_lookup, error_messages)
+    """
+    network = TransportNetwork()
+    fare_lookup = {}
+    errors = []
+    
+    custom_dir = 'custom-data'
+    
+    if not os.path.exists(custom_dir):
+        return network, {}, ["Error: 'custom-data' folder not found."]
+    
+    csv_files = [f for f in os.listdir(custom_dir) if f.endswith('.csv')]
+    
+    if not csv_files:
+        return network, {}, ["Error: No CSV files found in 'custom-data' folder."]
+    
+    for filename in csv_files:
+        filepath = os.path.join(custom_dir, filename)
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+        except Exception as e:
+            errors.append(f"Error reading {filename}: {e}")
+            continue
+        
+        if not lines:
+            errors.append(f"Error: {filename} is empty.")
+            continue
+        
+        start_idx = 1 if lines[0].strip().lower().startswith('from_stop') else 0
+        file_count = 0
+        
+        for line in lines[start_idx:]:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            try:
+                parts = line.split(',')
+                if len(parts) != 4:
+                    continue
+                from_stop, to_stop, duration_str, cost_str = [p.strip() for p in parts]
+                if not from_stop or not to_stop:
+                    continue
+                duration = int(duration_str)
+                cost = float(cost_str)
+                if duration > 0 and cost >= 0:
+                    network.add_segment(Segment(from_stop, to_stop, duration, cost, mode='Bus'))
+                    fare_lookup[(from_stop, to_stop)] = cost
+                    file_count += 1
+            except (ValueError, IndexError):
+                continue
+        
+        if file_count > 0:
+            errors.append(f"Loaded {file_count} routes from {filename}")
+    
+    if not merge:
+        return network, fare_lookup, errors
+    
+    # Merge mode: load existing network and add custom data on top
+    base_network, base_fares, _ = load_network_all()
+    for stop, segments in network.stops.items():
+        for segment in segments:
+            base_network.add_segment(segment)
+    base_fares.update(fare_lookup)
+    return base_network, base_fares, errors

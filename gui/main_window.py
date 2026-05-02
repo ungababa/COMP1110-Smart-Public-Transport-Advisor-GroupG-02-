@@ -79,12 +79,13 @@ class MainWindow(QMainWindow):
         self.form.populate_stops(self.network.all_stops)
         self.form.setFixedWidth(300)
         self.form.searchRequested.connect(self._on_search_requested)
+        self.form.customDataRequested.connect(self._on_custom_data_requested)
 
         # ── Right side: map on top, results table below ───────────────────────
         right_splitter = QSplitter(Qt.Orientation.Vertical)
 
         self.map_widget = HKMapWidget()
-        self.map_widget.set_network(self.network)
+        self.map_widget.set_network(self.network, show_bus_stops=True)
         self.map_widget.stationClicked.connect(self._on_station_clicked)
 
         self.results_table = ResultsTable()
@@ -204,6 +205,30 @@ class MainWindow(QMainWindow):
         self.form.search_btn.setEnabled(True)
         self._searching_label.setVisible(False)
         self.status_bar.showMessage(f"Search error: {msg}")
+
+    def _on_custom_data_requested(self, merge: bool):
+        """Load custom data from custom-data/ folder."""
+        from files import load_custom_data
+
+        new_network, new_fare_lookup, errors = load_custom_data(merge=merge)
+
+        if errors:
+            for error in errors:
+                self.status_bar.showMessage(error)
+
+        if new_network and new_network.all_stops:
+            self.network = new_network
+            self.fare_lookup = new_fare_lookup
+            # Don't show bus stops for custom data
+            self.map_widget.set_network(self.network, show_bus_stops=False)
+            self.form.populate_stops(self.network.all_stops)
+
+            stops = len(self.network.all_stops)
+            segs = self.network.get_num_segments()
+            mode_text = "merged" if merge else "replaced"
+            self.status_bar.showMessage(
+                f"Custom data {mode_text}  ·  {stops} stops  ·  {segs} segments"
+            )
 
     def _on_journey_selected(self, index: int):
         if 0 <= index < len(self.found_journeys):

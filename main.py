@@ -19,7 +19,7 @@ def preference_to_optimization(preference: str) -> str:
 # =============================================================================
 # Import data structures and load functions from files.py
 # =============================================================================
-from files import Segment, Journey, TransportNetwork, load_network, load_network_all, haversine_distance
+from files import Segment, Journey, TransportNetwork, load_network, load_network_all, haversine_distance, load_custom_data
 
 # =============================================================================
 # A* Pathfinding Algorithm
@@ -102,7 +102,7 @@ def transfer_time_penalty(prev_segment: Optional[Segment], next_segment: Segment
         if next_segment.route_name == prev_segment.route_name:
             return 0
 
-    # If both segments are the same mode and share either route_id or route_name, no transfer penalty.
+    # If both segments are the same mode and share eithesr route_id or route_name, no transfer penalty.
     if next_segment.route_id == prev_segment.route_id or (next_segment.route_name and prev_segment.route_name and next_segment.route_name == prev_segment.route_name):
         return 0
 
@@ -387,15 +387,19 @@ def filter_journeys_by_transport(journeys: List[Journey], preferred_modes: Optio
 
 def display_menu() -> None:
     """Displays the main menu."""
-    print("\n" + "=" * 50)
-    print("  Smart Public Transport Advisor")
-    print("=" * 50)
-    print("  1. List all stops")
-    print("  2. Query journeys")
-    print("  3. Show network summary")
-    print("  4. Load different network file")
-    print("  5. Exit")
-    print("=" * 50)
+    sep = _c("=" * 60, BREAK_COLOUR)
+    title = _c("  Smart Public Transport Advisor", HEADING_COLOUR + Style.BRIGHT)
+    print("\n" + sep)
+    print(title)
+    print(sep)
+    print(_c("  1.", Fore.YELLOW), _c("List all stops", Style.NORMAL))
+    print(_c("  2.", Fore.YELLOW), _c("Query journeys", Style.NORMAL))
+    print(_c("  3.", Fore.YELLOW), _c("Show network summary", Style.NORMAL))
+    print(_c("  4.", Fore.YELLOW), _c("Load different network file", Style.NORMAL))
+    print(_c("  5.", Fore.YELLOW), _c("Load custom data (replace)", Style.NORMAL))
+    print(_c("  6.", Fore.YELLOW), _c("Load custom data (merge)", Style.NORMAL))
+    print(_c("  7.", Fore.YELLOW), _c("Exit", Style.NORMAL))
+    print(sep)
 
 
 def list_stops(network: TransportNetwork) -> None:
@@ -640,7 +644,7 @@ def main():
 
     while True:
         display_menu()
-        print("\nEnter choice (1-5): ", end="", flush=True)
+        print(_c("\nEnter choice (1-7): ", PROMPT_COLOUR), end="", flush=True)
         sys.stdout.flush()
         choice = input().strip()
 
@@ -657,13 +661,29 @@ def main():
             if new_network and new_network.all_stops:
                 network = new_network
                 fare_lookup = new_fare_lookup
-                print("\nNetwork loaded successfully!")
+                print(_c("\nNetwork loaded successfully!", RESULT_COLOUR))
         elif choice == '5':
-            print("\nThank you for using Smart Public Transport Advisor!")
-            print("Goodbye!")
+            new_network, new_fare_lookup, errors = load_custom_data(merge=False)
+            for error in errors:
+                print(_c(error, RESULT_COLOUR))
+            if new_network and new_network.all_stops:
+                network = new_network
+                fare_lookup = new_fare_lookup
+                print(_c("\nCustom network loaded (replaced existing)!", RESULT_COLOUR))
+        elif choice == '6':
+            new_network, new_fare_lookup, errors = load_custom_data(merge=True)
+            for error in errors:
+                print(_c(error, RESULT_COLOUR))
+            if new_network and new_network.all_stops:
+                network = new_network
+                fare_lookup = new_fare_lookup
+                print(_c("\nCustom network merged with existing!", RESULT_COLOUR))
+        elif choice == '7':
+            print(_c("\nThank you for using Smart Public Transport Advisor!", HEADING_COLOUR))
+            print(_c("Goodbye!", RESULT_COLOUR))
             break
         else:
-            print("\nInvalid choice. Please enter a number 1-5.")
+            print(_c("\nInvalid choice. Please enter a number 1-7.", RESULT_COLOUR))
 
 
 if __name__ == "__main__":

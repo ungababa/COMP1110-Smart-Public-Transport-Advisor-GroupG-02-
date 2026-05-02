@@ -416,12 +416,12 @@ class HKMapWidget(QWidget):
                     print(f"Error loading {candidate}: {e}")
         print("Warning: no map background file found.")
 
-    def set_network(self, network):
+    def set_network(self, network, show_bus_stops: bool = True):
         self.network = network
-        self._render_stations()
+        self._render_stations(show_bus_stops)
 
-    def _render_stations(self):
-        """Draw all MTR stations + top bus stops. Called once at startup."""
+    def _render_stations(self, show_bus_stops: bool = True):
+        """Draw all MTR stations + optionally bus stops."""
         if not self.network:
             return
 
@@ -435,7 +435,7 @@ class HKMapWidget(QWidget):
         mtr_count = 0
         important_bus_count = 0
 
-        # MTR stations
+        # All network stops that have MTR coordinates
         for stop in self.network.all_stops:
             if stop in STATION_COORDS:
                 lat, lon = STATION_COORDS[stop]
@@ -453,22 +453,28 @@ class HKMapWidget(QWidget):
                 self.view.register_station(stop, ellipse)
                 mtr_count += 1
 
-        # Important bus stops
-        for stop_id in self.important_bus_stops:
-            if stop_id in self.bus_stop_positions:
-                x, y = self.bus_stop_positions[stop_id]
-                size = 8
-                ellipse = QGraphicsEllipseItem(x - size/2, y - size/2, size, size)
-                ellipse.setBrush(QBrush(QColor(0, 150, 50)))
-                ellipse.setPen(QPen(Qt.GlobalColor.white, 1))
-                ellipse.setZValue(1)
-                self.scene.addItem(ellipse)
-                important_bus_count += 1
+        # Important bus stops (only if shown) - limited to top 100 to avoid clutter
+        if show_bus_stops:
+            shown = 0
+            for stop_id in self.important_bus_stops:
+                if shown >= 100:
+                    break
+                if stop_id in self.bus_stop_positions:
+                    x, y = self.bus_stop_positions[stop_id]
+                    size = 5
+                    ellipse = QGraphicsEllipseItem(x - size/2, y - size/2, size, size)
+                    ellipse.setBrush(QBrush(QColor(80, 200, 100, 140)))  # semi-transparent green
+                    ellipse.setPen(QPen(QColor(255, 255, 255, 80), 0.5))  # faint white ring
+                    ellipse.setZValue(1)
+                    self.scene.addItem(ellipse)
+                    important_bus_count += 1
+                    shown += 1
 
         self.view.fitInView(0, 0, MAP_PIXEL_WIDTH, MAP_PIXEL_HEIGHT,
-                            Qt.AspectRatioMode.KeepAspectRatio)
+                          Qt.AspectRatioMode.KeepAspectRatio)
+        bus_suffix = f" + {important_bus_count} important bus interchanges" if show_bus_stops else ""
         self.status_label.setText(
-            f"Showing {mtr_count} MTR stations + {important_bus_count} important bus interchanges  ·  "
+            f"Showing {mtr_count} MTR stations{bus_suffix}  ·  "
             "Scroll to zoom  ·  Drag to pan  ·  Click a station to select it"
         )
 
