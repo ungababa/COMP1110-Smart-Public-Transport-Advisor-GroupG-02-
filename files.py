@@ -34,19 +34,18 @@ class Journey:
         self.segments = segments
         self.origin = origin
         self.destination = destination
-        
+
         # Group segments into legs (consecutive segments with same route_id and mode)
         legs = self._group_segments(segments)
         num_transfers = max(0, len(legs) - 1)
         buffer_time = num_transfers * 5  # 5 minutes per transfer
-        
+
         self.total_duration = sum(s.duration for s in segments) + buffer_time
-        
-        direct_fare = fare_lookup.get((origin, destination))
-        if direct_fare is not None:
-            self.total_cost = direct_fare
-        else:
-            self.total_cost = self._calculate_cost_with_consolidation(segments)
+
+        # Always compute cost per-leg so bus journeys between MTR stations are
+        # not silently charged the MTR fare, and multi-stop MTR legs use the
+        # correct origin→destination fare rather than just the first hop.
+        self.total_cost = self._calculate_cost_with_consolidation(segments, fare_lookup)
 
     def _group_segments(self, segments):
         """Group consecutive segments that share the same route_id + mode into legs.
@@ -73,42 +72,64 @@ class Journey:
         groups.append(current)
         return groups
 
-    def _calculate_cost_with_consolidation(self, segments: List[Segment]) -> float:
-        """Calculate cost, treating consecutive segments from the same route/line as one journey.
-        
-        Works for all transport modes: Bus, MTR, Light Rail, Airport Express, etc.
-        If a transport has the same route_id for consecutive segments, charges once.
+    def _calculate_cost_with_consolidation(self, segments: List[Segment],
+                                             fare_lookup: Optional[Dict[Tuple[str, str], float]] = None) -> float:
+        """Calculate cost treating consecutive same-route segments as one leg.
+
+        For each leg the fare is looked up from fare_lookup using the leg's
+        actual origin and destination (e.g. the correct distance-based MTR
+        fare for the full leg, not just the first hop).  Falls back to the
+        first segment's stored cost when no lookup entry exists (e.g. bus).
         """
         if not segments:
             return 0.0
-        
+
         total_cost = 0.0
         i = 0
-        
+
         while i < len(segments):
-            current_segment = segments[i]
-            
-            # Check if this segment has a route_id (applies to all transport modes)
-            if current_segment.route_id:
-                # Add the fare for this route once
-                total_cost += current_segment.cost
-                route_id = current_segment.route_id
-                mode = current_segment.mode_of_transport
-                
-                # Skip all consecutive segments from the same route and mode
-                while i + 1 < len(segments) and segments[i + 1].route_id == route_id and segments[i + 1].mode_of_transport == mode:
-                    i += 1
+            seg = segments[i]
+
+            if seg.route_id:
+                route_id = seg.route_id
+                mode     = seg.mode_of_transport
+                leg_from = seg.from_stop
+
+                # Advance to the last segment of this leg
+                j = i
+                while (j + 1 < len(segments)
+                       and segments[j + 1].route_id == route_id
+                       and segments[j + 1].mode_of_transport == mode):
+                    j += 1
+
+                leg_to = segments[j].to_stop
+
+                # Use fare_lookup only for modes whose fares are stored there (MTR/AEL).
+                # Bus, Light Rail, etc. always fall back to the segment's stored cost.
+                MTR_MODES = {'MTR', 'Airport Express'}
+                leg_fare = (fare_lookup.get((leg_from, leg_to))
+                            if fare_lookup and mode in MTR_MODES else None)
+                total_cost += leg_fare if leg_fare is not None else seg.cost
+                i = j   # jump to end of leg
             else:
-                # For segments without route_id, add the cost normally
-                total_cost += current_segment.cost
-            
+                total_cost += seg.cost
+
             i += 1
-        
+
         return total_cost
 
     @property
     def num_segments(self) -> int:
         return len(self.segments)
+
+    @property
+    def num_legs(self) -> int:
+        """Number of grouped legs (distinct routes/modes), i.e. actual transfers + 1.
+
+        A 6-stop non-stop MTR ride is 1 leg; a 2-stop journey with a bus-to-MTR
+        change is 2 legs.  Used for 'fewest transfers' ranking.
+        """
+        return len(self._group_segments(self.segments))
 
     def __repr__(self):
         return (f"Journey({self.num_segments} segments, "
@@ -407,10 +428,10 @@ def load_network_from_mtr() -> Tuple[TransportNetwork, Dict[Tuple[str, str], flo
             fare = fare_lookup.get((from_station, to_station), 5.0)
             duration = ael_durations.get((from_station, to_station), TYPICAL_DURATION) if line == 'AEL' else TYPICAL_DURATION
             
-            network.add_segment(Segment(from_station, to_station, duration, fare, mode='MTR'))
+            network.add_segment(Segment(from_station, to_station, duration, fare, mode='MTR', route_id=route_id))
             reverse_fare = fare_lookup.get((to_station, from_station), fare)
             reverse_duration = ael_durations.get((to_station, from_station), duration) if line == 'AEL' else TYPICAL_DURATION
-            network.add_segment(Segment(to_station, from_station, reverse_duration, reverse_fare, mode='MTR'))
+            network.add_segment(Segment(to_station, from_station, reverse_duration, reverse_fare, mode='MTR', route_id=route_id))
 
     return network, fare_lookup, []
 
@@ -527,6 +548,7 @@ def load_network_from_bus() -> Tuple['TransportNetwork', Dict[Tuple[str, str], f
         info = route_info.get(route_id, {})
         fare = info.get('full_fare', 5.0)
         total_journey_time = info.get('journey_time')
+        seg_route_id = f"{route_id}_{route_seq}"   # unique per route + direction
         
         total_route_distance = 0.0
         segment_distances = []
@@ -551,8 +573,8 @@ def load_network_from_bus() -> Tuple['TransportNetwork', Dict[Tuple[str, str], f
             else:
                 duration = FALLBACK_DURATION
 
-            network.add_segment(Segment(from_station, to_station, duration, fare, mode='Bus'))
-            network.add_segment(Segment(to_station, from_station, duration, fare, mode='Bus'))
+            network.add_segment(Segment(from_station, to_station, duration, fare, mode='Bus', route_id=seg_route_id))
+            network.add_segment(Segment(to_station, from_station, duration, fare, mode='Bus', route_id=seg_route_id))
 
     for stop_name, (lat, lon) in stop_coords.items():
         network.set_stop_coords(stop_name, lat, lon)
