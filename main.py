@@ -103,6 +103,33 @@ def estimate_cost(network: TransportNetwork, current_stop: str, destination: str
     return 1  # Minimal heuristic for fewest/duration
 
 
+def transfer_time_penalty(prev_segment: Optional[Segment], next_segment: Segment) -> float:
+    """Return the transfer penalty (buffer time) between consecutive segments.
+
+    A penalty is added when switching between different routes or transport modes.
+    Same route_id + mode is considered a continuous ride with no penalty.
+    If route_id is missing or route_name matches, treat it as continuous when mode is the same.
+    """
+    if prev_segment is None:
+        return 0
+
+    if next_segment.mode_of_transport != prev_segment.mode_of_transport:
+        return 5
+
+    if next_segment.route_id and prev_segment.route_id:
+        if next_segment.route_id == prev_segment.route_id:
+            return 0
+    elif next_segment.route_name and prev_segment.route_name:
+        if next_segment.route_name == prev_segment.route_name:
+            return 0
+
+    # If both segments are the same mode and share either route_id or route_name, no transfer penalty.
+    if next_segment.route_id == prev_segment.route_id or (next_segment.route_name and prev_segment.route_name and next_segment.route_name == prev_segment.route_name):
+        return 0
+
+    return 5
+
+
 def generate_journeys_astar(network: TransportNetwork, fare_lookup: Dict[Tuple[str, str], float],
                             origin: str, destination: str, optimization: str = 'duration',
                             max_journeys: int = 20) -> List[Journey]:
@@ -148,8 +175,10 @@ def generate_journeys_astar(network: TransportNetwork, fare_lookup: Dict[Tuple[s
     initial_node = AStarNode(g_start, g_start + h_start, origin, [])
     heap = [(initial_node.f_cost, counter, initial_node)]
 
-    # Track best g_cost for each stop (visited with best cost)
-    best_g_cost: Dict[str, float] = {origin: 0}
+    # Track best g_cost for each stop + last-route state (visited with best cost)
+    best_g_cost: Dict[Tuple[str, Optional[str], Optional[str]], float] = {
+        (origin, None, None): 0
+    }
 
     # Limit exploration
     exploration_count = 0
@@ -161,7 +190,10 @@ def generate_journeys_astar(network: TransportNetwork, fare_lookup: Dict[Tuple[s
 
         # If we reached destination
         if current.stop == destination and current.path:
-            path_key = tuple(s.from_stop + '->' + s.to_stop for s in current.path)
+            path_key = tuple(
+                f"{s.from_stop}->{s.to_stop}|{s.mode_of_transport}|{s.route_id or ''}|{s.route_name or ''}"
+                for s in current.path
+            )
             if path_key not in found_paths:
                 found_paths.add(path_key)
                 journeys.append(Journey(current.path.copy(), fare_lookup, origin, destination))
@@ -174,7 +206,8 @@ def generate_journeys_astar(network: TransportNetwork, fare_lookup: Dict[Tuple[s
 
             # Calculate actual cost to reach next_stop
             if optimization == 'duration':
-                g_cost = current.g_cost + segment.duration
+                penalty = transfer_time_penalty(current.last_segment, segment)
+                g_cost = current.g_cost + segment.duration + penalty
             elif optimization == 'cost':
                 if current.last_segment is not None and segment.route_id and current.last_segment.route_id == segment.route_id and current.last_segment.mode_of_transport == segment.mode_of_transport:
                     g_cost = current.g_cost
@@ -183,8 +216,9 @@ def generate_journeys_astar(network: TransportNetwork, fare_lookup: Dict[Tuple[s
             else:  # fewest
                 g_cost = current.g_cost + 1
 
-            # Skip if we've found a better path to this stop
-            if next_canonical in best_g_cost and best_g_cost[next_canonical] <= g_cost:
+            # Skip if we've found a better path to this stop+route state
+            next_state = (next_canonical, segment.route_id, segment.mode_of_transport)
+            if next_state in best_g_cost and best_g_cost[next_state] <= g_cost:
                 continue
 
             # Check for cycles in current path using canonical stops
@@ -192,7 +226,7 @@ def generate_journeys_astar(network: TransportNetwork, fare_lookup: Dict[Tuple[s
                 continue
 
             # Update best cost and add to heap
-            best_g_cost[next_canonical] = g_cost
+            best_g_cost[next_state] = g_cost
             h_estimate = estimate_cost(network, next_stop, destination, optimization)
             f_cost = g_cost + h_estimate
 

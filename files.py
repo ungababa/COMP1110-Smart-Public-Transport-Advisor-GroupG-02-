@@ -34,12 +34,44 @@ class Journey:
         self.segments = segments
         self.origin = origin
         self.destination = destination
-        self.total_duration = sum(s.duration for s in segments)
+        
+        # Group segments into legs (consecutive segments with same route_id and mode)
+        legs = self._group_segments(segments)
+        num_transfers = max(0, len(legs) - 1)
+        buffer_time = num_transfers * 5  # 5 minutes per transfer
+        
+        self.total_duration = sum(s.duration for s in segments) + buffer_time
+        
         direct_fare = fare_lookup.get((origin, destination))
         if direct_fare is not None:
             self.total_cost = direct_fare
         else:
             self.total_cost = self._calculate_cost_with_consolidation(segments)
+
+    def _group_segments(self, segments):
+        """Group consecutive segments that share the same route_id + mode into legs.
+
+        Returns list of lists, where each inner list is one continuous leg.
+        Segments with no route_id (e.g. Walk) are never merged.
+        """
+        if not segments:
+            return []
+        groups = []
+        current = [segments[0]]
+        for seg in segments[1:]:
+            prev = current[-1]
+            same_route = (
+                seg.route_id is not None
+                and seg.route_id == prev.route_id
+                and seg.mode_of_transport == prev.mode_of_transport
+            )
+            if same_route:
+                current.append(seg)
+            else:
+                groups.append(current)
+                current = [seg]
+        groups.append(current)
+        return groups
 
     def _calculate_cost_with_consolidation(self, segments: List[Segment]) -> float:
         """Calculate cost, treating consecutive segments from the same route/line as one journey.
