@@ -1,4 +1,8 @@
 from_stop,to_stop,duration,cost
-Central,Admiralty,2,5.5
-Admiralty,Wan Chai,3,5.5
-Wan Chai,Causeway Bay,2,5.5
+HKU,QMH,3,4.00
+QMH,Cyberport,4,4.00
+Cyberport,Wah Fu,5,4.50
+Wah Fu,Wah Kwai,4,4.50
+Wah Kwai,Tin Wan,4,5.00
+Tin Wan,Aberdeen,5,5.00
+Aberdeen,Wong Chuk Hang,6,5.50
