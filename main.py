@@ -6,6 +6,28 @@ from typing import List, Dict, Tuple, Optional
 import csv
 from collections import deque
 
+from typing import Callable
+from typing import List, Dict, Tuple, Optional
+
+# Require colorama for CLI colours
+from colorama import init as _colorama_init, Fore, Style
+_colorama_init(autoreset=True)
+
+def _c(text: str, color: str = '') -> str:
+    """Wrap text with colour codes."""
+    return f"{color}{text}{Style.RESET_ALL}"
+
+
+def _rgb(r: int, g: int, b: int) -> str:
+    """Return a 24-bit ANSI foreground colour escape sequence."""
+    return f"\033[38;2;{r};{g};{b}m"
+
+
+HEADING_COLOUR = _rgb(173, 216, 230)
+BREAK_COLOUR = _rgb(187, 213, 218)
+RESULT_COLOUR = _rgb(154, 216, 114)
+PROMPT_COLOUR = Fore.WHITE
+
 def preference_to_optimization(preference: str) -> str:
     """Map a user preference to the A* optimization mode."""
     if preference in {'duration', 'cost', 'fewest'}:
@@ -27,6 +49,9 @@ from files import Segment, Journey, TransportNetwork, load_network, load_network
 
 import heapq
 from typing import Callable
+
+def _c(text: str, color: str) -> str:
+    return color + text + Style.RESET_ALL
 
 class AStarNode:
     """Node for A* priority queue."""
