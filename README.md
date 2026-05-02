@@ -148,7 +148,7 @@ Here's the updated documentation:
 
 Custom networks can be loaded via Option 4. A network is defined using **two separate CSV files**.
 
-> **Note:** Each network file must represent a **single mode of transport** (e.g., MTR only, or bus only — not mixed).
+> **Note:** Each additional network file which would be added must represent a **single mode of transport** (e.g. the program can only have one addional medium of transport).
 
 ---
 
