@@ -210,7 +210,7 @@ class MainWindow(QMainWindow):
         """Load custom data from custom-data/ folder."""
         from files import load_custom_data
 
-        new_network, new_fare_lookup, errors = load_custom_data(merge=merge)
+        new_network, new_fare_lookup, errors, custom_coords = load_custom_data(merge=merge)
 
         if errors:
             for error in errors:
@@ -219,8 +219,8 @@ class MainWindow(QMainWindow):
         if new_network and new_network.all_stops:
             self.network = new_network
             self.fare_lookup = new_fare_lookup
-            # Don't show bus stops for custom data
-            self.map_widget.set_network(self.network, show_bus_stops=False)
+            # Don't show bus stops for custom data; pass custom coordinates if available
+            self.map_widget.set_network(self.network, show_bus_stops=False, custom_coords=custom_coords)
             self.form.populate_stops(self.network.all_stops)
 
             stops = len(self.network.all_stops)
