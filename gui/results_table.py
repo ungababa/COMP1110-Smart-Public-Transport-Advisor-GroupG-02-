@@ -13,28 +13,22 @@ from PyQt6.QtGui import QColor, QFont
 
 # Colour per transport mode — matches the map dots
 MODE_COLORS = {
-    "MTR":             ("#89b4fa", "#1e1e2e"),
-    "Bus":             ("#a6e3a1", "#1e1e2e"),
-    "Light Rail":      ("#fab387", "#1e1e2e"),
-    "Walk":            ("#a6adc8", "#1e1e2e"),
-    "Airport Express": ("#cba6f7", "#1e1e2e"),
+    "MTR":  ("#89b4fa", "#1e1e2e"),
+    "Bus":  ("#a6e3a1", "#1e1e2e"),
+    "Walk": ("#a6adc8", "#1e1e2e"),
 }
 
 MODE_ICONS = {
-    "MTR":             "🚇",
-    "Bus":             "🚌",
-    "Light Rail":      "🚊",
-    "Walk":            "🚶",
-    "Airport Express": "✈️",
+    "MTR":  "🚇",
+    "Bus":  "🚌",
+    "Walk": "🚶",
 }
 
 # Dark tinted background per mode (for badges/pills)
 MODE_DARK_BG = {
-    "MTR":             "#1a2035",
-    "Bus":             "#1a2a1a",
-    "Light Rail":      "#2a1e14",
-    "Walk":            "#1e2028",
-    "Airport Express": "#231a2e",
+    "MTR":  "#1a2035",
+    "Bus":  "#1a2a1a",
+    "Walk": "#1e2028",
 }
 
 

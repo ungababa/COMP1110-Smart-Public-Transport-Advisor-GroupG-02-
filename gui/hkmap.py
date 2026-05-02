@@ -16,11 +16,9 @@ from PyQt6.QtGui import QPen, QBrush, QColor, QPainter, QPixmap, QFont
 
 # ── Transport mode colours ────────────────────────────────────────────────────
 MODE_COLORS = {
-    'MTR':            QColor(0, 100, 200),
-    'Bus':            QColor(0, 150, 50),
-    'Light Rail':     QColor(200, 100, 0),
-    'Walk':           QColor(100, 100, 100),
-    'Airport Express':QColor(150, 0, 150),
+    'MTR':  QColor(0, 100, 200),
+    'Bus':  QColor(0, 150, 50),
+    'Walk': QColor(100, 100, 100),
 }
 
 # ── MTR station coordinates (WGS84) ──────────────────────────────────────────
@@ -183,13 +181,9 @@ def load_bus_stops():
                         stop_id_coords[stop_id] = (lat, lon)
                     except ValueError:
                         continue
-            
-            print(f"Loaded {len(stop_id_coords)} bus stops from STOP_BUS.xml")
         
-        except Exception as e:
-            print(f"Error loading bus stops: {e}")
-    else:
-        print("Warning: STOP_BUS.xml not found.")
+        except Exception:
+            pass
     
     # Load stop names from RSTOP_BUS.xml and map to coordinates
     xml_paths = [
@@ -218,16 +212,12 @@ def load_bus_stops():
                     if stop_id not in stop_id_to_names:
                         stop_id_to_names[stop_id] = set()
                     stop_id_to_names[stop_id].add(stop_name)
-                    # Map stop name to coordinates (only add if not already mapped)
                     if stop_name not in stop_name_coords:
                         stop_name_coords[stop_name] = stop_id_coords[stop_id]
         
-        except Exception as e:
-            print(f"Error loading stop names: {e}")
-    else:
-        print("Warning: RSTOP_BUS.xml not found.")
+        except Exception:
+            pass
 
-    print(f"Loaded {len(stop_name_coords)} named bus stops for journey mapping")
     return stop_id_coords, stop_name_coords
 
 
@@ -250,29 +240,25 @@ def identify_important_bus_stations(stop_id_coords):
             break
     
     if not xml_file:
-        print("Warning: RSTOP_BUS.xml not found. All bus stops will be treated equally.")
         return important_stops
     
     try:
         tree = ET.parse(xml_file)
         root = tree.getroot()
         
-        # Count routes per stop
         for route_elem in root.findall('RSTOP'):
             stop_id = route_elem.findtext('STOP_ID')
             if stop_id and stop_id in stop_id_coords:
                 stop_route_count[stop_id] = stop_route_count.get(stop_id, 0) + 1
         
-        # Select top 300 stops by route count
         MAX_IMPORTANT_STOPS = 300
         sorted_stops = sorted(stop_route_count.items(), key=lambda x: x[1], reverse=True)
         for stop_id, count in sorted_stops[:MAX_IMPORTANT_STOPS]:
             important_stops[stop_id] = count
     
-    except Exception as e:
-        print(f"Error identifying important bus stations: {e}")
+    except Exception:
+        pass
     
-    print(f"Identified {len(important_stops)} top important bus interchanges (top 300 by route density)")
     return important_stops
 
 
@@ -419,11 +405,9 @@ class HKMapWidget(QWidget):
                     pixmap = QPixmap(str(candidate))
                     bg = self.scene.addPixmap(pixmap)
                     bg.setZValue(-1)
-                    print(f"Map background loaded: {candidate}")
                     return
-                except Exception as e:
-                    print(f"Error loading {candidate}: {e}")
-        print("Warning: no map background file found.")
+                except Exception:
+                    pass
 
     def set_network(self, network):
         self.network = network

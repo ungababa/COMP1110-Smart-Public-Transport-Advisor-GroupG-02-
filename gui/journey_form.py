@@ -14,10 +14,8 @@ from .widgets import AutocompleteComboBox
 # ── Mode definitions ──────────────────────────────────────────────────────────
 
 MODES = [
-    ("MTR",             "🚇 MTR",             "#89b4fa", "#1a2035"),
-    ("Bus",             "🚌 Bus",             "#a6e3a1", "#1a2a1a"),
-    ("Light Rail",      "🚊 Light Rail",      "#fab387", "#2a1e14"),
-    ("Airport Express", "✈️ Airport Exp.",    "#cba6f7", "#231a2e"),
+    ("MTR", "🚇 MTR",  "#89b4fa", "#1a2035"),
+    ("Bus", "🚌 Bus",  "#a6e3a1", "#1a2a1a"),
 ]
 
 PREFS = [
