@@ -4,7 +4,7 @@ import math
 import xml.etree.ElementTree as ET
 import csv
 import heapq
-from files import Segment, Journey, TransportNetwork, load_network_from_mtr, load_network, load_network_from_light_rail, load_network_from_bus, load_network_from_airport_express, load_network_all
+from files import Segment, Journey, TransportNetwork, load_network, load_network_all
 from collections import deque
 from typing import Callable
 from typing import List, Dict, Tuple, Optional
