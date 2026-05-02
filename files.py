@@ -608,29 +608,50 @@ def load_network_all() -> Tuple[TransportNetwork, Dict[Tuple[str, str], float], 
     return network, fare_lookup, []
 
 
-def load_custom_data(merge: bool = False) -> Tuple[TransportNetwork, Dict[Tuple[str, str], float], List[str]]:
+def load_custom_data(merge: bool = False) -> Tuple[TransportNetwork, Dict[Tuple[str, str], float], List[str], Dict[str, Tuple[float, float]]]:
     """Load custom network data from custom-data/ folder.
-    
+
     Args:
         merge: If True, merge with existing network. If False, replace it.
-    
+
     Returns:
-        (network, fare_lookup, error_messages)
+        (network, fare_lookup, error_messages, custom_coords)
     """
     network = TransportNetwork()
     fare_lookup = {}
     errors = []
-    
+    custom_coords = {}
+
     custom_dir = 'custom-data'
-    
+
     if not os.path.exists(custom_dir):
-        return network, {}, ["Error: 'custom-data' folder not found."]
-    
-    csv_files = [f for f in os.listdir(custom_dir) if f.endswith('.csv')]
-    
+        return network, {}, ["Error: 'custom-data' folder not found."], {}
+
+    # Load coordinates file first if it exists
+    coords_file = os.path.join(custom_dir, 'custom_coords.csv')
+    if os.path.exists(coords_file):
+        try:
+            with open(coords_file, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    station = row.get('Station', row.get('station', '')).strip()
+                    lat = row.get('Latitude', row.get('latitude', '')).strip()
+                    lon = row.get('Longitude', row.get('longitude', '')).strip()
+                    if station and lat and lon:
+                        try:
+                            custom_coords[station] = (float(lat), float(lon))
+                        except ValueError:
+                            pass
+            if custom_coords:
+                errors.append(f"Loaded coordinates for {len(custom_coords)} custom stops")
+        except Exception as e:
+            errors.append(f"Warning: could not load custom_coords.csv: {e}")
+
+    csv_files = [f for f in os.listdir(custom_dir) if f.endswith('.csv') and f != 'custom_coords.csv']
+
     if not csv_files:
-        return network, {}, ["Error: No CSV files found in 'custom-data' folder."]
-    
+        return network, {}, ["Error: No route CSV files found in 'custom-data' folder."], custom_coords
+
     for filename in csv_files:
         filepath = os.path.join(custom_dir, filename)
         try:
@@ -639,14 +660,14 @@ def load_custom_data(merge: bool = False) -> Tuple[TransportNetwork, Dict[Tuple[
         except Exception as e:
             errors.append(f"Error reading {filename}: {e}")
             continue
-        
+
         if not lines:
             errors.append(f"Error: {filename} is empty.")
             continue
-        
+
         start_idx = 1 if lines[0].strip().lower().startswith('from_stop') else 0
         file_count = 0
-        
+
         for line in lines[start_idx:]:
             line = line.strip()
             if not line or line.startswith('#'):
@@ -666,17 +687,17 @@ def load_custom_data(merge: bool = False) -> Tuple[TransportNetwork, Dict[Tuple[
                     file_count += 1
             except (ValueError, IndexError):
                 continue
-        
+
         if file_count > 0:
             errors.append(f"Loaded {file_count} routes from {filename}")
-    
+
     if not merge:
-        return network, fare_lookup, errors
-    
+        return network, fare_lookup, errors, custom_coords
+
     # Merge mode: load existing network and add custom data on top
     base_network, base_fares, _ = load_network_all()
     for stop, segments in network.stops.items():
         for segment in segments:
             base_network.add_segment(segment)
     base_fares.update(fare_lookup)
-    return base_network, base_fares, errors
+    return base_network, base_fares, errors, custom_coords

@@ -661,7 +661,7 @@ def main():
                 fare_lookup = new_fare_lookup
                 print(_c("\nNetwork loaded successfully!", RESULT_COLOUR))
         elif choice == '5':
-            new_network, new_fare_lookup, errors = load_custom_data(merge=False)
+            new_network, new_fare_lookup, errors, _ = load_custom_data(merge=False)
             for error in errors:
                 print(_c(error, RESULT_COLOUR))
             if new_network and new_network.all_stops:
@@ -669,7 +669,7 @@ def main():
                 fare_lookup = new_fare_lookup
                 print(_c("\nCustom network loaded (replaced existing)!", RESULT_COLOUR))
         elif choice == '6':
-            new_network, new_fare_lookup, errors = load_custom_data(merge=True)
+            new_network, new_fare_lookup, errors, _ = load_custom_data(merge=True)
             for error in errors:
                 print(_c(error, RESULT_COLOUR))
             if new_network and new_network.all_stops:

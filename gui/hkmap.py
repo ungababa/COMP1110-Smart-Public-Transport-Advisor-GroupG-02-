@@ -334,6 +334,7 @@ class HKMapWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.network = None
+        self.custom_coords = {}   # custom stop coordinates
         self.stop_positions      = {}   # MTR station name → (x, y) pixels
         self._station_items      = {}   # MTR station name → ellipse item
         self._path_items         = []   # items drawn for the current journey (cleared on next search)
@@ -416,8 +417,9 @@ class HKMapWidget(QWidget):
                     print(f"Error loading {candidate}: {e}")
         print("Warning: no map background file found.")
 
-    def set_network(self, network, show_bus_stops: bool = True):
+    def set_network(self, network, show_bus_stops: bool = True, custom_coords: dict = None):
         self.network = network
+        self.custom_coords = custom_coords or {}
         self._render_stations(show_bus_stops)
 
     def _render_stations(self, show_bus_stops: bool = True):
@@ -445,6 +447,22 @@ class HKMapWidget(QWidget):
                 size = 16
                 ellipse = QGraphicsEllipseItem(x - size/2, y - size/2, size, size)
                 ellipse.setBrush(QBrush(MODE_COLORS['MTR']))
+                ellipse.setPen(QPen(Qt.GlobalColor.white, 2))
+                ellipse.setZValue(1)
+                ellipse.setToolTip(stop)
+                self.scene.addItem(ellipse)
+                self._station_items[stop] = ellipse
+                self.view.register_station(stop, ellipse)
+                mtr_count += 1
+            # Custom stops with their own coordinates
+            elif self.custom_coords and stop in self.custom_coords:
+                lat, lon = self.custom_coords[stop]
+                x, y = map_range(lat, lon)
+                self.stop_positions[stop] = (x, y)
+
+                size = 14
+                ellipse = QGraphicsEllipseItem(x - size/2, y - size/2, size, size)
+                ellipse.setBrush(QBrush(MODE_COLORS['Bus']))
                 ellipse.setPen(QPen(Qt.GlobalColor.white, 2))
                 ellipse.setZValue(1)
                 ellipse.setToolTip(stop)
