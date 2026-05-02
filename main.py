@@ -420,10 +420,9 @@ def display_menu() -> None:
     print(_c("  1.", Fore.YELLOW), _c("List all stops", Style.NORMAL))
     print(_c("  2.", Fore.YELLOW), _c("Query journeys", Style.NORMAL))
     print(_c("  3.", Fore.YELLOW), _c("Show network summary", Style.NORMAL))
-    print(_c("  4.", Fore.YELLOW), _c("Load different network file", Style.NORMAL))
-    print(_c("  5.", Fore.YELLOW), _c("Load custom data (replace)", Style.NORMAL))
-    print(_c("  6.", Fore.YELLOW), _c("Load custom data (merge)", Style.NORMAL))
-    print(_c("  7.", Fore.YELLOW), _c("Exit", Style.NORMAL))
+    print(_c("  4.", Fore.YELLOW), _c("Load custom data (replace)", Style.NORMAL))
+    print(_c("  5.", Fore.YELLOW), _c("Load custom data (merge)", Style.NORMAL))
+    print(_c("  6.", Fore.YELLOW), _c("Exit", Style.NORMAL))
     print(sep)
 
 
@@ -630,21 +629,6 @@ def query_journeys(network: TransportNetwork, fare_lookup: Dict[Tuple[str, str],
     journeys = filter_journeys_by_transport(journeys, transport_pref)
     display_journeys(journeys, origin, destination, preference)
 
-
-def load_network_interactive() -> Tuple[Optional[TransportNetwork], Dict[Tuple[str, str], float], List[str]]:
-    """Prompts user for network file path and loads it."""
-    print("\nEnter network file path: ", end="", flush=True)
-    sys.stdout.flush()
-    filename = input().strip()
-
-    if not filename:
-        print("Error: No filename provided.")
-        return None, {}, ["Error: No filename provided."]
-
-    network, fare_lookup, warnings = load_network(filename)
-    return network, fare_lookup, warnings
-
-
 # =============================================================================
 # Main Entry Point
 # =============================================================================
@@ -677,15 +661,8 @@ def main():
             query_journeys(network, fare_lookup)
         elif choice == '3':
             show_summary(network)
+        
         elif choice == '4':
-            new_network, new_fare_lookup, new_warnings = load_network_interactive()
-            for warning in new_warnings:
-                print(warning)
-            if new_network and new_network.all_stops:
-                network = new_network
-                fare_lookup = new_fare_lookup
-                print(_c("\nNetwork loaded successfully!", RESULT_COLOUR))
-        elif choice == '5':
             new_network, new_fare_lookup, errors, _ = load_custom_data(merge=False)
             for error in errors:
                 print(_c(error, RESULT_COLOUR))
@@ -693,7 +670,7 @@ def main():
                 network = new_network
                 fare_lookup = new_fare_lookup
                 print(_c("\nCustom network loaded (replaced existing)!", RESULT_COLOUR))
-        elif choice == '6':
+        elif choice == '5':
             new_network, new_fare_lookup, errors, _ = load_custom_data(merge=True)
             for error in errors:
                 print(_c(error, RESULT_COLOUR))
@@ -701,7 +678,7 @@ def main():
                 network = new_network
                 fare_lookup = new_fare_lookup
                 print(_c("\nCustom network merged with existing!", RESULT_COLOUR))
-        elif choice == '7':
+        elif choice == '6':
             print(_c("\nThank you for using Smart Public Transport Advisor!", HEADING_COLOUR))
             print(_c("Goodbye!", RESULT_COLOUR))
             break
