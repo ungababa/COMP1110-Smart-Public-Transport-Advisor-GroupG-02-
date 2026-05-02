@@ -110,19 +110,23 @@ Opens a PyQt6 window. The network loads in the background; the A\* search also r
 ============================================================
 ```
 
-**Option 1 — List all stops**  
+**Option 1 — List all stops**
 Displays every stop in the loaded network. Type a partial name to filter; press Enter to list all.
 
-**Option 2 — Query journeys**  
+**Option 2 — Query journeys**
 Prompts for origin, destination, transport mode filter (optional), and preference. Returns the top ranked journeys with per-segment breakdowns (stop names, mode, duration, cost) and journey totals (total minutes, total HKD, number of legs).
 
-**Option 3 — Show network summary**  
+**Option 3 — Show network summary**
 Prints total stops, total segments, average segment duration, and average segment cost.
 
-**Option 4 — Load different network file**  
-Enter a path to any CSV file in the format described below. The new network replaces the current one without restarting.
+**Option 4 — Load custom data (replace)**
+Enter paths to your `stations.csv` and `connections.csv` files. The new network **replaces** the current one entirely without restarting.
 
-**Option 5 — Exit**
+**Option 5 — Load custom data (merge)**
+Enter paths to your `stations.csv` and `connections.csv` files. The new data is **merged** into the existing network, adding stops and connections without removing current ones.
+
+**Option 6 — Exit**
+Quits the program.
 
 ---
 
