@@ -2,7 +2,7 @@
 
 **COMP1110 Computing and Data Science in Everyday Life**  
 **Group G-02 — Topic B: Smart Public Transport Advisor**  
-University of Hong Kong, School of Computing and Data Science  
+University of Hong Kong
 Semester 2, 2025–2026
 
 ---
@@ -12,6 +12,47 @@ Semester 2, 2025–2026
 This program models Hong Kong's public transport network as a graph of stops and segments, and helps users find journeys between any two stops. Each segment connects two stops and carries a duration (minutes) and cost (HKD). The program accepts an origin, a destination, and a preference mode — fastest, cheapest, or fewest transfers — and returns ranked candidate journeys with a full per-segment breakdown.
 
 The implementation uses the **A\* pathfinding algorithm** guided by a geographic (haversine) heuristic for efficient search. Both a **text-based CLI** and an optional **GUI** (PyQt6 with an interactive Hong Kong map) are provided.
+
+---
+
+---
+
+## Language and Requirements
+
+**Language:** Python 3.8 or above
+
+**Dependencies** (install once before running):
+
+```
+colorama      # coloured terminal output for the CLI
+PyQt6         # required only for --gui mode
+pyreadline3   # Windows readline support (optional)
+```
+
+Install all at once:
+
+```bash
+pip install -r requirements.txt
+```
+---
+
+## How to Run
+
+### CLI mode
+
+```bash
+python main.py
+```
+
+On startup the program automatically loads the full Hong Kong network from `data/mtr/` and `data/bus/`. If those files are missing or empty, it falls back to `data/Test/network.csv`. Warnings are printed for any data that could not be loaded; the program always continues.
+
+### GUI mode
+
+```bash
+python main.py --gui
+```
+
+Opens a PyQt6 window. The network loads in the background; the A\* search also runs on a background thread so the map stays interactive. Use the form on the left to enter stops and preferences; results appear in the table on the right.
 
 ---
 
@@ -54,46 +95,6 @@ The implementation uses the **A\* pathfinding algorithm** guided by a geographic
         └── network_map3.csv    # Same coverage as map3.csv in simple format
 ```
 
----
-
-## Language and Requirements
-
-**Language:** Python 3.8 or above
-
-**Dependencies** (install once before running):
-
-```
-colorama      # coloured terminal output for the CLI
-PyQt6         # required only for --gui mode
-pyreadline3   # Windows readline support (optional)
-```
-
-Install all at once:
-
-```bash
-pip install -r requirements.txt
-```
----
-
-## How to Run
-
-### CLI mode
-
-```bash
-python main.py
-```
-
-On startup the program automatically loads the full Hong Kong network from `data/mtr/` and `data/bus/`. If those files are missing or empty, it falls back to `data/Test/network.csv`. Warnings are printed for any data that could not be loaded; the program always continues.
-
-### GUI mode
-
-```bash
-python main.py --gui
-```
-
-Opens a PyQt6 window. The network loads in the background; the A\* search also runs on a background thread so the map stays interactive. Use the form on the left to enter stops and preferences; results appear in the table on the right.
-
----
 
 ## CLI Menu
 
