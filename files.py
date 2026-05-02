@@ -351,7 +351,7 @@ def load_network_from_mtr() -> Tuple[TransportNetwork, Dict[Tuple[str, str], flo
     except Exception as e:
         warnings.append(f"Warning: Could not read fares file: {str(e)}")
 
-    airport_fares_file = 'data/airport_express_fares.csv'
+    airport_fares_file = 'data/mtr/airport_express_fares.csv'
     try:
         with open(airport_fares_file, 'r', encoding='utf-8-sig') as f:
             reader = csv.DictReader(f)
@@ -704,7 +704,7 @@ def load_network_from_airport_express() -> Tuple[TransportNetwork, Dict[Tuple[st
     network = TransportNetwork()
     warnings = []
 
-    fares_file = 'data/airport_express_fares.csv'
+    fares_file = 'data/mtr/airport_express_fares.csv'
     if not os.path.exists(fares_file):
         return network, {}, [f"Warning: {fares_file} not found"]
 
