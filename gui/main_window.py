@@ -38,11 +38,12 @@ class JourneyWorker(QObject):
             from main import generate_journeys, rank_journeys, filter_journeys_by_transport
             journeys = generate_journeys(
                 self.network, self.fare_lookup, self.origin, self.destination,
-                optimization=self.optimization
+                optimization=self.optimization,
+                max_journeys=50,
             )
             if self.modes:
                 journeys = filter_journeys_by_transport(journeys, set(self.modes))
-            journeys = rank_journeys(journeys, self.preference)[:10]
+            journeys = rank_journeys(journeys, self.preference)[:5]
             self.finished.emit(journeys)
         except Exception as e:
             self.error.emit(str(e))

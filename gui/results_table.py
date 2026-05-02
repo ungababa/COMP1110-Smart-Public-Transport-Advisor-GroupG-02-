@@ -458,6 +458,15 @@ class ResultsTable(QWidget):
         legs = _group_segments(j.segments)
         for i, leg in enumerate(legs):
             self._detail_layout.addWidget(_LegWidget(leg, i))
+            # Add buffer time label between legs (transfers)
+            if i < len(legs) - 1:
+                buffer_label = QLabel("⏱️ Transfer buffer: 5 min")
+                buffer_label.setStyleSheet(
+                    "color: #f38ba8; font-size: 10px; font-weight: 600; "
+                    "padding: 4px 12px; background-color: #1e1e2e; border-radius: 4px; "
+                    "margin: 2px 0;"
+                )
+                self._detail_layout.addWidget(buffer_label)
 
         # Spacer at bottom
         self._detail_layout.addStretch()
