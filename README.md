@@ -105,8 +105,9 @@ Opens a PyQt6 window. The network loads in the background; the A\* search also r
   1. List all stops
   2. Query journeys
   3. Show network summary
-  4. Load different network file
-  5. Exit
+  4. Load custom data (replace)
+  5. Load custom data (merge)
+  6. Exit
 ============================================================
 ```
 
