@@ -72,9 +72,9 @@ def estimate_cost(network: TransportNetwork, current_stop: str, destination: str
         elif optimization == 'cost':
             # Minimum possible cost is 0
             return 0
-        else:  # fewest
-            # Assume at least 1 segment per ~500m or so
-            return max(1, straight_line_dist / 500)
+        else:  # fewest legs
+            # Best case is always 1 more leg to reach the destination
+            return 1
 
     # Fallback: if no coordinates, use very small heuristic
     if optimization == 'cost':
@@ -192,8 +192,15 @@ def generate_journeys_astar(network: TransportNetwork, fare_lookup: Dict[Tuple[s
                     g_cost = current.g_cost
                 else:
                     g_cost = current.g_cost + segment.cost
-            else:  # fewest
-                g_cost = current.g_cost + 1
+            else:  # fewest — count legs (transfers), not raw segments
+                # Only increment when starting a new leg (route or mode changes)
+                same_route = (
+                    current.last_segment is not None
+                    and segment.route_id is not None
+                    and segment.route_id == current.last_segment.route_id
+                    and segment.mode_of_transport == current.last_segment.mode_of_transport
+                )
+                g_cost = current.g_cost if same_route else current.g_cost + 1
 
             # Skip if we've found a better path to this stop+route state
             next_state = (next_canonical, segment.route_id, segment.mode_of_transport)
@@ -262,11 +269,14 @@ def rank_journeys(journeys: List[Journey], preference: str) -> List[Journey]:
         Sorted list of journeys
     """
     if preference == 'fastest':
-        return sorted(journeys, key=lambda j: (j.total_duration, j.total_cost, j.num_segments))
+        return sorted(journeys, key=lambda j: (j.total_duration, j.total_cost, j.num_legs))
     elif preference == 'cheapest':
-        return sorted(journeys, key=lambda j: (j.total_cost, j.total_duration, j.num_segments))
+        return sorted(journeys, key=lambda j: (j.total_cost, j.total_duration, j.num_legs))
     elif preference == 'fewest':
-        return sorted(journeys, key=lambda j: (j.num_segments, j.total_duration, j.total_cost))
+        # Sort by number of legs (transfers), not raw segment count.
+        # A 6-stop non-stop ride (1 leg) should rank above a 2-stop journey
+        # that requires a mode/route change (2 legs).
+        return sorted(journeys, key=lambda j: (j.num_legs, j.total_duration, j.total_cost))
     else:
         return journeys
 
@@ -462,18 +472,20 @@ def display_journeys(journeys: List[Journey], origin: str, destination: str,
     print(f"{'=' * 60}")
 
     for i, journey in enumerate(ranked, 1):
-        print(f"\n--- Journey {i} ---")
-        print(f"  Duration: {journey.total_duration} minutes")
-        print(f"  Cost:     ${journey.total_cost:.2f} HKD")
-        print(f"  Segments: {journey.num_segments}")
-        print("  Route:")
+        print(f"\n{_c('--- Journey', HEADING_COLOUR)} {_c(str(i), HEADING_COLOUR)} {_c('---', HEADING_COLOUR)}")
+        print(f"  {_c('Duration:', Fore.YELLOW)} {_c(str(journey.total_duration) + ' minutes', RESULT_COLOUR)}")
+        print(f"  {_c('Cost:', Fore.YELLOW)} {_c(f'${journey.total_cost:.2f} HKD', RESULT_COLOUR)}")
+        print(f"  {_c('Legs:', Fore.YELLOW)} {_c(str(journey.num_legs), RESULT_COLOUR)}")
+        print(f"  {_c('Route:', HEADING_COLOUR)}")
 
         for j, segment in enumerate(journey.segments, 1):
             bus_info = ""
             if segment.mode_of_transport == 'Bus' and segment.route_name:
-                bus_info = f" [Bus {segment.route_name} ({segment.operator})]"
-            print(f"    {j}. {segment.from_stop} -> {segment.to_stop} "
-                f"({segment.duration}min, ${segment.cost:.2f}){bus_info} [{segment.mode_of_transport}]")
+                bus_info = f" {_c('[Bus', HEADING_COLOUR)} {segment.route_name} {segment.operator} {_c(']', HEADING_COLOUR)}"
+            print(_c(f"    {j}.", Fore.YELLOW),
+                  _c(f"{segment.from_stop} -> {segment.to_stop} "
+                     f"({segment.duration}min, ${segment.cost:.2f}) "
+                     f"[{segment.mode_of_transport}]", RESULT_COLOUR) + bus_info)
 
         print()
 
@@ -509,28 +521,26 @@ def validate_stops(network: TransportNetwork, origin: str, destination: str) -> 
 
     return True, "", origin_norm, dest_norm
 
+
 def prompt_stop_input(prompt_msg: str, network: TransportNetwork) -> str:
     """Prompt for stop input with validation."""
     stops = sorted(network.all_stops, key=str.lower)
 
     while True:
-        # Print prompt explicitly with flush to avoid buffering
-        print(prompt_msg, end="", flush=True)
-        sys.stdout.flush()  # Force output to terminal
+        print(_c(prompt_msg, PROMPT_COLOUR), end="", flush=True)
+        sys.stdout.flush()
         user_input = input().strip()
-        
+
         if not user_input:
             print("Please enter a stop name.")
             continue
 
         normalized = " ".join(user_input.lower().split())
 
-        # Exact match
         exact = next((s for s in stops if s.lower() == normalized), None)
         if exact:
             return exact
 
-        # Partial word match (all words must be in stop name)
         words = normalized.split()
         if words:
             matches = [s for s in stops if all(w in s.lower() for w in words)]
@@ -544,33 +554,14 @@ def prompt_stop_input(prompt_msg: str, network: TransportNetwork) -> str:
         print(f"Error: No stop found matching '{user_input}'")
 
 
-def _matches_all_words(text: str, stops: List[str]) -> List[str]:
-    """Return stops where ALL words in text are found in the stop name."""
-    text_lower = text.lower()
-    words = text_lower.split()
-    if not words:
-        return []
-
-    matches = []
-    for stop in stops:
-        stop_lower = stop.lower()
-        if all(word in stop_lower for word in words):
-            matches.append(stop)
-    return matches
-
-
 def get_preference() -> str:
-    """Prompts user for preference mode and returns valid preference.
-
-    Returns:
-        Valid preference string: 'fastest', 'cheapest', or 'fewest'
-    """
+    """Prompts user for preference mode and returns valid preference."""
     while True:
-        print("\nSelect preference:")
-        print("  1. Fastest (shortest total time)")
-        print("  2. Cheapest (lowest total cost)")
-        print("  3. Fewest segments (simplest route)")
-        print("Enter choice (1-3): ", end="", flush=True)
+        print("\n" + _c("Select preference:", HEADING_COLOUR + Style.BRIGHT))
+        print(_c("  1.", Fore.YELLOW), _c("Fastest (shortest total time)", Fore.WHITE))
+        print(_c("  2.", Fore.YELLOW), _c("Cheapest (lowest total cost)", Fore.WHITE))
+        print(_c("  3.", Fore.YELLOW), _c("Fewest transfers (simplest route)", Fore.WHITE))
+        print(_c("Enter choice (1-3): ", PROMPT_COLOUR), end="", flush=True)
         sys.stdout.flush()
         choice = input().strip()
 
@@ -594,34 +585,22 @@ def query_journeys(network: TransportNetwork, fare_lookup: Dict[Tuple[str, str],
         print("\nError: No network loaded. Please load a network first.")
         return
 
-    # Get origin and destination with autocomplete
-    print("\nTip: Start typing a stop name, see suggestions below.")
+    print(_c("\nTip: Start typing a stop name, see suggestions below.", HEADING_COLOUR))
     origin = prompt_stop_input("\nEnter origin stop: ", network)
     destination = prompt_stop_input("Enter destination stop: ", network)
 
-    # Validate stops
     is_valid, error_msg, origin, destination = validate_stops(network, origin, destination)
     if not is_valid:
         print(f"\n{error_msg}")
         return
 
-    # Get preference
+    transport_pref = get_transport_preferences(network)
     preference = get_preference()
-
-    # Map preference to optimization parameter
     optimization = preference_to_optimization(preference)
 
-    # Get transport medium preference (multi-select)
-    transport_pref = get_transport_preferences(network)
-
-    # Generate journeys using A* with optimization
     journeys = generate_journeys(network, fare_lookup, origin, destination,
-                               optimization=optimization)
-
-    # Apply transport-mode filter (if any)
+                                 optimization=optimization)
     journeys = filter_journeys_by_transport(journeys, transport_pref)
-
-    # Display results
     display_journeys(journeys, origin, destination, preference)
 
 
@@ -638,14 +617,14 @@ def load_network_interactive() -> Tuple[Optional[TransportNetwork], Dict[Tuple[s
     network, fare_lookup, warnings = load_network(filename)
     return network, fare_lookup, warnings
 
+
 # =============================================================================
 # Main Entry Point
 # =============================================================================
 
 def main():
     """Main function - entry point of the program."""
-    # Try to load from all transport data
-    print("Loading complete transport network...")
+    print(_c("Loading complete transport network...", HEADING_COLOUR))
     network, fare_lookup, warnings = load_network_all()
 
     if not network.all_stops:
@@ -659,7 +638,6 @@ def main():
         print("\nWarning: No network could be loaded.")
         print("You can load a different network using option 4.")
 
-    # Main menu loop
     while True:
         display_menu()
         print("\nEnter choice (1-5): ", end="", flush=True)
@@ -668,13 +646,10 @@ def main():
 
         if choice == '1':
             list_stops(network)
-
         elif choice == '2':
             query_journeys(network, fare_lookup)
-
         elif choice == '3':
             show_summary(network)
-
         elif choice == '4':
             new_network, new_fare_lookup, new_warnings = load_network_interactive()
             for warning in new_warnings:
@@ -683,17 +658,15 @@ def main():
                 network = new_network
                 fare_lookup = new_fare_lookup
                 print("\nNetwork loaded successfully!")
-
         elif choice == '5':
             print("\nThank you for using Smart Public Transport Advisor!")
             print("Goodbye!")
             break
-
         else:
             print("\nInvalid choice. Please enter a number 1-5.")
 
+
 if __name__ == "__main__":
-    # Check if running in GUI mode
     if len(sys.argv) > 1 and sys.argv[1] == "--gui":
         from gui.main_window import run_gui
 

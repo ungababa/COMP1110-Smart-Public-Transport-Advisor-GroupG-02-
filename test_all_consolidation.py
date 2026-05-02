@@ -67,8 +67,8 @@ mixed_segments = [
 journey = Journey(mixed_segments, {}, 'Stop A', 'Tuen Mun')
 print(f"  Segments: {len(journey.segments)}")
 print(f"  Total cost: ${journey.total_cost:.2f}")
-print(f"  Expected: $18.50 (6.6 for bus + 4.5 for MTR + 2.9 for Light Rail)")
-print(f"  ✓ PASSED" if journey.total_cost == 18.5 else f"  ✗ FAILED")
+print(f"  Expected: $14.00 (6.60 consolidated bus + 4.50 consolidated MTR + 2.90 Light Rail)")
+print(f"  ✓ PASSED" if abs(journey.total_cost - 14.0) < 0.001 else f"  ✗ FAILED")
 
 # Test 6: Non-consecutive same route (should charge separately)
 print("\nTest 6: MTR - Non-consecutive same line (should charge separately)")
@@ -83,6 +83,7 @@ print(f"  Total cost: ${journey.total_cost:.2f}")
 print(f"  Expected: $14.00 (4.5 + 5.0 + 4.5)")
 print(f"  ✓ PASSED" if journey.total_cost == 14.0 else f"  ✗ FAILED")
 
+print("\n" + "=" * 60)
 print("\n" + "=" * 60)
 print("All consolidation tests completed!")
 print("=" * 60)

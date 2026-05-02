@@ -3,7 +3,6 @@ Hong Kong Map Visualization Widget
 """
 
 import os
-import csv
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from PyQt6.QtWidgets import (
@@ -17,37 +16,111 @@ from PyQt6.QtGui import QPen, QBrush, QColor, QPainter, QPixmap, QFont
 
 # ── Transport mode colours ────────────────────────────────────────────────────
 MODE_COLORS = {
-    'MTR':  QColor(0, 100, 200),
-    'Bus':  QColor(0, 150, 50),
-    'Walk': QColor(100, 100, 100),
+    'MTR':            QColor(0, 100, 200),
+    'Bus':            QColor(0, 150, 50),
+    'Light Rail':     QColor(200, 100, 0),
+    'Walk':           QColor(100, 100, 100),
+    'Airport Express':QColor(150, 0, 150),
 }
 
-def load_station_coords():
-    """Load MTR station coordinates from mtr_lines_coords.csv."""
-    coords = {}
-    csv_paths = [
-        Path('data/mtr/mtr_lines_coords.csv'),
-        Path('gui/../data/mtr/mtr_lines_coords.csv'),
-        Path(__file__).parent.parent / 'data' / 'mtr' / 'mtr_lines_coords.csv',
-    ]
-
-    for csv_path in csv_paths:
-        if csv_path.exists():
-            try:
-                with open(csv_path, 'r', encoding='utf-8') as f:
-                    reader = csv.DictReader(f)
-                    for row in reader:
-                        station = row['Station'].strip()
-                        lat = float(row['Latitude'])
-                        lon = float(row['Longitude'])
-                        coords[station] = (lat, lon)
-                return coords
-            except Exception:
-                pass
-    return {}
-
-
-STATION_COORDS = load_station_coords()
+# ── MTR station coordinates (WGS84) ──────────────────────────────────────────
+# Corrected coordinates verified against official MTR map
+STATION_COORDS = {
+    'Admiralty':          (22.2794, 114.1651),
+    'Airport':            (22.3160, 113.9366),
+    'AsiaWorld-Expo':     (22.3218, 113.9412),
+    'Austin':             (22.3046, 114.1670),
+    'Causeway Bay':       (22.2802, 114.1835),
+    'Central':            (22.2820, 114.1576),
+    'Chai Wan':           (22.2644, 114.2368),
+    'Che Kung Temple':    (22.3748, 114.1861),
+    'Cheung Sha Wan':     (22.3354, 114.1563),
+    'Choi Hung':          (22.3348, 114.2089),
+    'City One':           (22.3828, 114.2035),
+    'Diamond Hill':       (22.3401, 114.2016),
+    'Disneyland Resort':  (22.3155, 114.0451),
+    'East Tsim Sha Tsui': (22.2955, 114.1754),
+    'Fanling':            (22.4921, 114.1387),
+    'Fo Tan':             (22.3953, 114.1982),
+    'Fortress Hill':      (22.2881, 114.1936),
+    'HKU':                (22.2841, 114.1354),
+    'Hang Hau':           (22.3156, 114.2644),
+    'Heng Fa Chuen':      (22.2769, 114.2398),
+    'Heng On':            (22.4174, 114.2258),
+    'Hin Keng':           (22.3640, 114.1708),
+    'Ho Man Tin':         (22.3093, 114.1829),
+    'Hong Kong':          (22.2850, 114.1580),
+    'Hung Hom':           (22.3029, 114.1816),
+    'Jordan':             (22.3049, 114.1718),
+    'Kai Tak':            (22.3304, 114.1994),
+    'Kam Sheung Road':    (22.4348, 114.0634),
+    'Kennedy Town':       (22.2815, 114.1283),
+    'Kowloon Bay':        (22.3235, 114.2141),
+    'Kowloon Tong':       (22.3370, 114.1762),
+    'Kowloon':            (22.3049, 114.1615),
+    'Kwai Fong':          (22.3569, 114.1279),
+    'Kwai Hing':          (22.3632, 114.1312),
+    'Kwun Tong':          (22.3121, 114.2265),
+    'LOHAS Park':         (22.2957, 114.2689),
+    'Lai Chi Kok':        (22.3373, 114.1482),
+    'Lai King':           (22.3484, 114.1261),
+    'Lam Tin':            (22.3068, 114.2330),
+    'Lei Tung':           (22.2421, 114.1562),
+    'Lo Wu':              (22.5283, 114.1134),
+    'Lok Fu':             (22.3380, 114.1871),
+    'Lok Ma Chau':        (22.5144, 114.0657),
+    'Long Ping':          (22.4477, 114.0253),
+    'Ma On Shan':         (22.4247, 114.2316),
+    'Mei Foo':            (22.3381, 114.1376),
+    'Mong Kok East':      (22.3222, 114.1728),
+    'Mong Kok':           (22.3191, 114.1694),
+    'Nam Cheong':         (22.3268, 114.1533),
+    'Ngau Tau Kok':       (22.3154, 114.2193),
+    'North Point':        (22.2909, 114.2007),
+    'Ocean Park':         (22.2486, 114.1743),
+    'Olympic':            (22.3178, 114.1602),
+    'Po Lam':             (22.3224, 114.2580),
+    'Prince Edward':      (22.3245, 114.1683),
+    'Quarry Bay':         (22.2878, 114.2096),
+    'Sai Wan Ho':         (22.2816, 114.2224),
+    'Sai Ying Pun':       (22.2856, 114.1430),
+    'Sha Tin Wai':        (22.3771, 114.1950),
+    'Sha Tin':            (22.3825, 114.1875),
+    'Sham Shui Po':       (22.3307, 114.1623),
+    'Shau Kei Wan':       (22.2789, 114.2289),
+    'Shek Kip Mei':       (22.3320, 114.1687),
+    'Shek Mun':           (22.3877, 114.2083),
+    'Sheung Shui':        (22.5012, 114.1280),
+    'Sheung Wan':         (22.2862, 114.1518),
+    'Siu Hong':           (22.4120, 113.9786),
+    'South Horizons':     (22.2425, 114.1491),
+    'Sunny Bay':          (22.3318, 114.0288),
+    'Tai Koo':            (22.2846, 114.2161),
+    'Tai Po Market':      (22.4446, 114.1706),
+    'Tai Shui Hang':      (22.4088, 114.2230),
+    'Tai Wai':            (22.3731, 114.1786),
+    'Tai Wo Hau':         (22.3708, 114.1250),
+    'Tai Wo':             (22.4511, 114.1611),
+    'Tin Hau':            (22.2827, 114.1917),
+    'Tin Shui Wai':       (22.4481, 114.0046),
+    'Tiu Keng Leng':      (22.3042, 114.2524),
+    'Tseung Kwan O':      (22.3074, 114.2600),
+    'Tsim Sha Tsui':      (22.2973, 114.1722),
+    'Tsing Yi':           (22.3584, 114.1070),
+    'Tsuen Wan West':     (22.3686, 114.1098),
+    'Tsuen Wan':          (22.3736, 114.1178),
+    'Tuen Mun':           (22.3952, 113.9731),
+    'Tung Chung':         (22.2893, 113.9416),
+    'University':         (22.4134, 114.2102),
+    'Wan Chai':           (22.2773, 114.1728),
+    'Whampo':             (22.3050, 114.1896),
+    'Wong Chuk Hang':     (22.2480, 114.1681),
+    'Wong Tai Sin':       (22.3417, 114.1939),
+    'Wu Kai Sha':         (22.4291, 114.2438),
+    'Yau Ma Tei':         (22.3129, 114.1707),
+    'Yau Tong':           (22.2979, 114.2371),
+    'Yuen Long':          (22.4461, 114.0352),
+}
 
 # ── Map geometry ──────────────────────────────────────────────────────────────
 MAP_PIXEL_WIDTH  = 3214
@@ -60,13 +133,7 @@ MAP_SOUTH = 22.15
 
 
 def map_range(lat, lon):
-    """Convert lat/lon to pixel coordinates on the map image.
-
-    The +90/+80 offsets were empirically calibrated against the base map PNG:
-    they minimise the number of MTR stations whose mapped pixel falls on water.
-    (Offset (90, 80) leaves only LOHAS Park borderline — a genuine coastal
-    reclaimed-land station — out of all 98 MTR stops.)
-    """
+    """Convert lat/lon to pixel coordinates on the map image."""
     x = (lon - MAP_WEST)  / (MAP_EAST  - MAP_WEST)  * MAP_PIXEL_WIDTH  + 90
     y = (MAP_NORTH - lat) / (MAP_NORTH - MAP_SOUTH) * MAP_PIXEL_HEIGHT + 80
     return x, y
@@ -110,9 +177,13 @@ def load_bus_stops():
                         stop_id_coords[stop_id] = (lat, lon)
                     except ValueError:
                         continue
+            
+            print(f"Loaded {len(stop_id_coords)} bus stops from STOP_BUS.xml")
         
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Error loading bus stops: {e}")
+    else:
+        print("Warning: STOP_BUS.xml not found.")
     
     # Load stop names from RSTOP_BUS.xml and map to coordinates
     xml_paths = [
@@ -141,12 +212,16 @@ def load_bus_stops():
                     if stop_id not in stop_id_to_names:
                         stop_id_to_names[stop_id] = set()
                     stop_id_to_names[stop_id].add(stop_name)
+                    # Map stop name to coordinates (only add if not already mapped)
                     if stop_name not in stop_name_coords:
                         stop_name_coords[stop_name] = stop_id_coords[stop_id]
         
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Error loading stop names: {e}")
+    else:
+        print("Warning: RSTOP_BUS.xml not found.")
 
+    print(f"Loaded {len(stop_name_coords)} named bus stops for journey mapping")
     return stop_id_coords, stop_name_coords
 
 
@@ -169,25 +244,29 @@ def identify_important_bus_stations(stop_id_coords):
             break
     
     if not xml_file:
+        print("Warning: RSTOP_BUS.xml not found. All bus stops will be treated equally.")
         return important_stops
     
     try:
         tree = ET.parse(xml_file)
         root = tree.getroot()
         
+        # Count routes per stop
         for route_elem in root.findall('RSTOP'):
             stop_id = route_elem.findtext('STOP_ID')
             if stop_id and stop_id in stop_id_coords:
                 stop_route_count[stop_id] = stop_route_count.get(stop_id, 0) + 1
         
+        # Select top 300 stops by route count
         MAX_IMPORTANT_STOPS = 300
         sorted_stops = sorted(stop_route_count.items(), key=lambda x: x[1], reverse=True)
         for stop_id, count in sorted_stops[:MAX_IMPORTANT_STOPS]:
             important_stops[stop_id] = count
     
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"Error identifying important bus stations: {e}")
     
+    print(f"Identified {len(important_stops)} top important bus interchanges (top 300 by route density)")
     return important_stops
 
 
@@ -321,14 +400,12 @@ class HKMapWidget(QWidget):
         # Prefer the dark stylised map; fall back to the standard base map
         root = Path(__file__).parent.parent
         candidates = [
-            root / 'data' / 'Hong_Kong_Dark_Map.png',   # primary — dark map in data/
-            Path('data/Hong_Kong_Dark_Map.png'),
             Path('Hong_Kong_Dark_Map.png'),
             root / 'Hong_Kong_Dark_Map.png',
-            root / 'data' / 'Hong_Kong_Base_Map.png',
-            Path('data/Hong_Kong_Base_Map.png'),
             Path('Hong_Kong_Base_Map.png'),
             root / 'Hong_Kong_Base_Map.png',
+            Path('data/Hong_Kong_Base_Map.png'),
+            root / 'data' / 'Hong_Kong_Base_Map.png',
         ]
         for candidate in candidates:
             if candidate.exists():
@@ -336,9 +413,11 @@ class HKMapWidget(QWidget):
                     pixmap = QPixmap(str(candidate))
                     bg = self.scene.addPixmap(pixmap)
                     bg.setZValue(-1)
+                    print(f"Map background loaded: {candidate}")
                     return
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(f"Error loading {candidate}: {e}")
+        print("Warning: no map background file found.")
 
     def set_network(self, network):
         self.network = network
@@ -377,22 +456,17 @@ class HKMapWidget(QWidget):
                 self.view.register_station(stop, ellipse)
                 mtr_count += 1
 
-        # Important bus stops — small semi-transparent dots to avoid clutter
-        # Only render the top 100 (sorted by route density, already capped in identify_*)
-        shown = 0
+        # Important bus stops
         for stop_id in self.important_bus_stops:
-            if shown >= 100:
-                break
             if stop_id in self.bus_stop_positions:
                 x, y = self.bus_stop_positions[stop_id]
-                size = 5
+                size = 8
                 ellipse = QGraphicsEllipseItem(x - size/2, y - size/2, size, size)
-                ellipse.setBrush(QBrush(QColor(80, 200, 100, 140)))   # semi-transparent green
-                ellipse.setPen(QPen(QColor(255, 255, 255, 80), 0.5))  # faint white ring
+                ellipse.setBrush(QBrush(QColor(0, 150, 50)))
+                ellipse.setPen(QPen(Qt.GlobalColor.white, 1))
                 ellipse.setZValue(1)
                 self.scene.addItem(ellipse)
                 important_bus_count += 1
-                shown += 1
 
         self.view.fitInView(0, 0, MAP_PIXEL_WIDTH, MAP_PIXEL_HEIGHT,
                             Qt.AspectRatioMode.KeepAspectRatio)
@@ -449,84 +523,39 @@ class HKMapWidget(QWidget):
                 self.scene.addItem(line)
                 self._path_items.append(line)
 
-        # Compute which stops get labels: origin, destination, and interchanges
-        # (stops where the route_id or mode changes between consecutive segments)
-        label_stops = {journey.origin, journey.destination}
-        segs = journey.segments
-        for i in range(len(segs) - 1):
-            curr, nxt = segs[i], segs[i + 1]
-            same_route = (
-                curr.route_id is not None
-                and curr.route_id == nxt.route_id
-                and curr.mode_of_transport == nxt.mode_of_transport
-            )
-            if not same_route:
-                label_stops.add(curr.to_stop)
-                label_stops.add(nxt.from_stop)
-
-        # Draw dots for every stop; labels only at interchange/endpoint stops.
-        # Labels use a greedy anti-overlap placement: try 6 candidate positions
-        # around each dot and pick the first that doesn't collide with an
-        # already-placed label.
-        placed_rects: list = []   # QRectF of each committed label pill
-
+        # Draw dots + labels for every stop in the journey
         for stop_name, (x, y) in all_journey_positions.items():
-            is_mtr        = stop_name in STATION_COORDS
-            should_label  = stop_name in label_stops
+            is_mtr = stop_name in STATION_COORDS
 
             # Highlight dot — white fill with a coloured ring
-            # Interchange/endpoint dots are slightly larger for emphasis
-            size = (18 if is_mtr else 13) if should_label else (14 if is_mtr else 9)
+            size = 16 if is_mtr else 11
             ellipse = QGraphicsEllipseItem(x - size/2, y - size/2, size, size)
-            ellipse.setBrush(QBrush(QColor(255, 255, 255)))
+            ellipse.setBrush(QBrush(QColor(255, 255, 255)))          # white fill
             ring_color = QColor(255, 210, 50) if is_mtr else QColor(255, 140, 0)
-            ellipse.setPen(QPen(ring_color, 3 if should_label else 2))
+            ellipse.setPen(QPen(ring_color, 3))
             ellipse.setZValue(3)
             self.scene.addItem(ellipse)
             self._path_items.append(ellipse)
 
-            if should_label:
-                # Add the text item first so we get an accurate bounding rect
-                text = QGraphicsTextItem(stop_name)
-                text.setFont(font)
-                text.setDefaultTextColor(QColor(15, 20, 40))
-                text.setZValue(4)
-                self.scene.addItem(text)
-
-                br   = text.boundingRect()
-                lw   = br.width()  + 6
-                lh   = br.height() + 2
-                pad  = size // 2 + 5   # gap between dot edge and label
-
-                # Six candidate positions: right, left, right-low, left-low,
-                # below-centre, above-centre
-                candidates = [
-                    (x + pad,           y - lh / 2),          # right
-                    (x - lw - pad,      y - lh / 2),           # left
-                    (x + pad,           y + 4),                # right-low
-                    (x - lw - pad,      y + 4),                # left-low
-                    (x - lw / 2,        y + pad),              # below
-                    (x - lw / 2,        y - lh - pad // 2),   # above
-                ]
-
-                lx, ly = candidates[0]   # fallback if all overlap
-                for cx, cy in candidates:
-                    probe = QRectF(cx - 3, cy - 3, lw + 6, lh + 6)
-                    if not any(probe.intersects(pr) for pr in placed_rects):
-                        lx, ly = cx, cy
-                        break
-
-                placed_rects.append(QRectF(lx - 3, ly - 3, lw + 6, lh + 6))
-                text.setPos(lx, ly)
-
-                bg_rect = self.scene.addRect(
-                    lx - 1, ly - 1, lw, lh,
-                    QPen(Qt.PenStyle.NoPen),
-                    QBrush(QColor(255, 255, 255, 200)),
-                )
-                bg_rect.setZValue(3)
-                self._path_items.append(bg_rect)
-                self._path_items.append(text)
+            # Label — dark text on a semi-transparent light pill for readability
+            text = QGraphicsTextItem(stop_name)
+            text.setFont(font)
+            text.setDefaultTextColor(QColor(15, 20, 40))             # very dark navy
+            # Offset slightly from the dot
+            text.setPos(x + size // 2 + 4, y - 9)
+            text.setZValue(4)
+            # Background rect behind text
+            br = text.boundingRect()
+            bg_rect = self.scene.addRect(
+                x + size // 2 + 3, y - 10,
+                br.width() + 4, br.height() + 2,
+                QPen(Qt.PenStyle.NoPen),
+                QBrush(QColor(255, 255, 255, 190)),  # semi-transparent white pill
+            )
+            bg_rect.setZValue(3)
+            self.scene.addItem(text)
+            self._path_items.append(bg_rect)
+            self._path_items.append(text)
 
         # Origin marker (green)
         origin_pos = all_journey_positions.get(journey.origin)
@@ -560,8 +589,7 @@ class HKMapWidget(QWidget):
         self._path_items.clear()
         self.status_label.setText("No journey selected")
 
-
-    # ── Internal helpers ─────────────────────────────────────────────────────
+    # ── Internal helpers ────────────────────────────────────────────────────────────
 
     def _add_endpoint_marker(self, pos, color: QColor, size: int):
         r = size / 2
@@ -595,4 +623,3 @@ class HKMapWidget(QWidget):
     def _reset_view(self):
         self.view.fitInView(0, 0, MAP_PIXEL_WIDTH, MAP_PIXEL_HEIGHT,
                             Qt.AspectRatioMode.KeepAspectRatio)
-
