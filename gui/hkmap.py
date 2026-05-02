@@ -392,12 +392,14 @@ class HKMapWidget(QWidget):
         # Prefer the dark stylised map; fall back to the standard base map
         root = Path(__file__).parent.parent
         candidates = [
+            root / 'data' / 'Hong_Kong_Dark_Map.png',   # primary — dark map in data/
+            Path('data/Hong_Kong_Dark_Map.png'),
             Path('Hong_Kong_Dark_Map.png'),
             root / 'Hong_Kong_Dark_Map.png',
+            root / 'data' / 'Hong_Kong_Base_Map.png',
+            Path('data/Hong_Kong_Base_Map.png'),
             Path('Hong_Kong_Base_Map.png'),
             root / 'Hong_Kong_Base_Map.png',
-            Path('data/Hong_Kong_Base_Map.png'),
-            root / 'data' / 'Hong_Kong_Base_Map.png',
         ]
         for candidate in candidates:
             if candidate.exists():
@@ -446,17 +448,22 @@ class HKMapWidget(QWidget):
                 self.view.register_station(stop, ellipse)
                 mtr_count += 1
 
-        # Important bus stops
+        # Important bus stops — small semi-transparent dots to avoid clutter
+        # Only render the top 100 (sorted by route density, already capped in identify_*)
+        shown = 0
         for stop_id in self.important_bus_stops:
+            if shown >= 100:
+                break
             if stop_id in self.bus_stop_positions:
                 x, y = self.bus_stop_positions[stop_id]
-                size = 8
+                size = 5
                 ellipse = QGraphicsEllipseItem(x - size/2, y - size/2, size, size)
-                ellipse.setBrush(QBrush(QColor(0, 150, 50)))
-                ellipse.setPen(QPen(Qt.GlobalColor.white, 1))
+                ellipse.setBrush(QBrush(QColor(80, 200, 100, 140)))   # semi-transparent green
+                ellipse.setPen(QPen(QColor(255, 255, 255, 80), 0.5))  # faint white ring
                 ellipse.setZValue(1)
                 self.scene.addItem(ellipse)
                 important_bus_count += 1
+                shown += 1
 
         self.view.fitInView(0, 0, MAP_PIXEL_WIDTH, MAP_PIXEL_HEIGHT,
                             Qt.AspectRatioMode.KeepAspectRatio)
@@ -513,39 +520,84 @@ class HKMapWidget(QWidget):
                 self.scene.addItem(line)
                 self._path_items.append(line)
 
-        # Draw dots + labels for every stop in the journey
+        # Compute which stops get labels: origin, destination, and interchanges
+        # (stops where the route_id or mode changes between consecutive segments)
+        label_stops = {journey.origin, journey.destination}
+        segs = journey.segments
+        for i in range(len(segs) - 1):
+            curr, nxt = segs[i], segs[i + 1]
+            same_route = (
+                curr.route_id is not None
+                and curr.route_id == nxt.route_id
+                and curr.mode_of_transport == nxt.mode_of_transport
+            )
+            if not same_route:
+                label_stops.add(curr.to_stop)
+                label_stops.add(nxt.from_stop)
+
+        # Draw dots for every stop; labels only at interchange/endpoint stops.
+        # Labels use a greedy anti-overlap placement: try 6 candidate positions
+        # around each dot and pick the first that doesn't collide with an
+        # already-placed label.
+        placed_rects: list = []   # QRectF of each committed label pill
+
         for stop_name, (x, y) in all_journey_positions.items():
-            is_mtr = stop_name in STATION_COORDS
+            is_mtr        = stop_name in STATION_COORDS
+            should_label  = stop_name in label_stops
 
             # Highlight dot — white fill with a coloured ring
-            size = 16 if is_mtr else 11
+            # Interchange/endpoint dots are slightly larger for emphasis
+            size = (18 if is_mtr else 13) if should_label else (14 if is_mtr else 9)
             ellipse = QGraphicsEllipseItem(x - size/2, y - size/2, size, size)
-            ellipse.setBrush(QBrush(QColor(255, 255, 255)))          # white fill
+            ellipse.setBrush(QBrush(QColor(255, 255, 255)))
             ring_color = QColor(255, 210, 50) if is_mtr else QColor(255, 140, 0)
-            ellipse.setPen(QPen(ring_color, 3))
+            ellipse.setPen(QPen(ring_color, 3 if should_label else 2))
             ellipse.setZValue(3)
             self.scene.addItem(ellipse)
             self._path_items.append(ellipse)
 
-            # Label — dark text on a semi-transparent light pill for readability
-            text = QGraphicsTextItem(stop_name)
-            text.setFont(font)
-            text.setDefaultTextColor(QColor(15, 20, 40))             # very dark navy
-            # Offset slightly from the dot
-            text.setPos(x + size // 2 + 4, y - 9)
-            text.setZValue(4)
-            # Background rect behind text
-            br = text.boundingRect()
-            bg_rect = self.scene.addRect(
-                x + size // 2 + 3, y - 10,
-                br.width() + 4, br.height() + 2,
-                QPen(Qt.PenStyle.NoPen),
-                QBrush(QColor(255, 255, 255, 190)),  # semi-transparent white pill
-            )
-            bg_rect.setZValue(3)
-            self.scene.addItem(text)
-            self._path_items.append(bg_rect)
-            self._path_items.append(text)
+            if should_label:
+                # Add the text item first so we get an accurate bounding rect
+                text = QGraphicsTextItem(stop_name)
+                text.setFont(font)
+                text.setDefaultTextColor(QColor(15, 20, 40))
+                text.setZValue(4)
+                self.scene.addItem(text)
+
+                br   = text.boundingRect()
+                lw   = br.width()  + 6
+                lh   = br.height() + 2
+                pad  = size // 2 + 5   # gap between dot edge and label
+
+                # Six candidate positions: right, left, right-low, left-low,
+                # below-centre, above-centre
+                candidates = [
+                    (x + pad,           y - lh / 2),          # right
+                    (x - lw - pad,      y - lh / 2),           # left
+                    (x + pad,           y + 4),                # right-low
+                    (x - lw - pad,      y + 4),                # left-low
+                    (x - lw / 2,        y + pad),              # below
+                    (x - lw / 2,        y - lh - pad // 2),   # above
+                ]
+
+                lx, ly = candidates[0]   # fallback if all overlap
+                for cx, cy in candidates:
+                    probe = QRectF(cx - 3, cy - 3, lw + 6, lh + 6)
+                    if not any(probe.intersects(pr) for pr in placed_rects):
+                        lx, ly = cx, cy
+                        break
+
+                placed_rects.append(QRectF(lx - 3, ly - 3, lw + 6, lh + 6))
+                text.setPos(lx, ly)
+
+                bg_rect = self.scene.addRect(
+                    lx - 1, ly - 1, lw, lh,
+                    QPen(Qt.PenStyle.NoPen),
+                    QBrush(QColor(255, 255, 255, 200)),
+                )
+                bg_rect.setZValue(3)
+                self._path_items.append(bg_rect)
+                self._path_items.append(text)
 
         # Origin marker (green)
         origin_pos = all_journey_positions.get(journey.origin)
@@ -579,7 +631,8 @@ class HKMapWidget(QWidget):
         self._path_items.clear()
         self.status_label.setText("No journey selected")
 
-    # ── Internal helpers ────────────────────────────────────────────────────────────
+
+    # ── Internal helpers ─────────────────────────────────────────────────────
 
     def _add_endpoint_marker(self, pos, color: QColor, size: int):
         r = size / 2
@@ -613,3 +666,4 @@ class HKMapWidget(QWidget):
     def _reset_view(self):
         self.view.fitInView(0, 0, MAP_PIXEL_WIDTH, MAP_PIXEL_HEIGHT,
                             Qt.AspectRatioMode.KeepAspectRatio)
+
