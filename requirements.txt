@@ -1,3 +1,2 @@
 pyreadline3
 PyQt6
-colorama
