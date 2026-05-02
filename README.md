@@ -161,11 +161,11 @@ Columns in order: `from_stop, to_stop, duration_minutes, cost_hkd`
 Detected automatically when the first row starts with `from_stop` (case-insensitive). Example:
 
 ```
-ID,START,STOP,MODE OF TRANSPORT,TIME,PRICE (HKD)
-1,Central,Admiralty,MTR (Island Line),4 mins,4.00
+ID,START,STOP,TIME,PRICE (HKD)
+1,Central,Admiralty,4 mins,4.00
 ```
 
-Columns are read by position: ID, from\_stop, to\_stop, mode, duration, cost.
+Columns are read by position: ID, from\_stop, to\_stop, duration, cost.
 
 ### Rules for both formats
 
