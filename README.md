@@ -140,33 +140,40 @@ The program runs A\* for the chosen optimisation, deduplicates paths, ranks them
 
 ---
 
-## Network File Format
+Network File Format
+Custom networks can be loaded via Option 4. A network is defined using two separate CSV files.
 
-Custom networks can be loaded via Option 4. Two CSV formats are accepted.
+Note: Each network file must represent a single mode of transport (e.g., MTR only, or bus only — not mixed).
 
-### Simple format (no header row)
 
-```
-Central,Admiralty,4,4.00
-Admiralty,Wan Chai,3,4.00
-```
+File 1 — Stations (stations.csv)
+No header row. Columns in order:
+Station,Latitude,Longitude
+ColumnDescriptionStationStop/station nameLatitudeDecimal degrees (e.g. 22.2800)LongitudeDecimal degrees (e.g. 114.1588)
+Example:
+Central,22.2820,114.1588
+Admiralty,22.2790,114.1650
+Wan Chai,22.2769,114.1730
 
-Columns in order: `from_stop, to_stop, duration_minutes, cost_hkd`
-
-- `duration_minutes` must be a positive integer.
-- `cost_hkd` must be a non-negative decimal.
-
-### Labelled format (with header row)
-
-Detected automatically when the first row starts with `from_stop` (case-insensitive). Example:
-
-```
+File 2 — Connections (connections.csv)
+Has a header row:
 ID,START,STOP,TIME,PRICE (HKD)
-1,Central,Admiralty,4 mins,4.00
-```
+ColumnDescriptionIDRow identifier (integer)STARTDeparting station nameSTOPArriving station nameTIMEDuration in minutes (positive integer)PRICE (HKD)Fare as a non-negative decimal
+Example:
+ID,START,STOP,TIME,PRICE (HKD)
+1,Central,Admiralty,4,4.00
+2,Admiralty,Wan Chai,3,4.00
 
-Columns are read by position: ID, from\_stop, to\_stop, duration, cost.
+Station names in START and STOP must exactly match names in stations.csv.
 
+
+Large File Storage (GitHub)
+If GitHub rejects your network files due to size limits, install Git LFS to store them:
+bashgit lfs install
+git lfs track "*.csv"
+git add .gitattributes
+git commit -m "Track CSVs with LFS"
+Only set this up if you encounter a file size error when pushing to GitHub.
 ### Rules for both formats
 
 - Lines beginning with `#` and blank lines are skipped.
