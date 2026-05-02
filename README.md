@@ -140,47 +140,80 @@ The program runs A\* for the chosen optimisation, deduplicates paths, ranks them
 
 ---
 
-Network File Format
-Custom networks can be loaded via Option 4. A network is defined using two separate CSV files.
+Here's the updated documentation:
 
-Note: Each network file must represent a single mode of transport (e.g., MTR only, or bus only — not mixed).
+---
 
+## Network File Format
 
-File 1 — Stations (stations.csv)
+Custom networks can be loaded via Option 4. A network is defined using **two separate CSV files**.
+
+> **Note:** Each network file must represent a **single mode of transport** (e.g., MTR only, or bus only — not mixed).
+
+---
+
+### File 1 — Stations (`stations.csv`)
+
 No header row. Columns in order:
+
+```
 Station,Latitude,Longitude
-ColumnDescriptionStationStop/station nameLatitudeDecimal degrees (e.g. 22.2800)LongitudeDecimal degrees (e.g. 114.1588)
+```
+
+| Column | Description |
+|---|---|
+| `Station` | Stop/station name |
+| `Latitude` | Decimal degrees (e.g. `22.2800`) |
+| `Longitude` | Decimal degrees (e.g. `114.1588`) |
+
 Example:
+```
 Central,22.2820,114.1588
 Admiralty,22.2790,114.1650
 Wan Chai,22.2769,114.1730
+```
 
-File 2 — Connections (connections.csv)
+---
+
+### File 2 — Connections (`connections.csv`)
+
 Has a header row:
+
+```
 ID,START,STOP,TIME,PRICE (HKD)
-ColumnDescriptionIDRow identifier (integer)STARTDeparting station nameSTOPArriving station nameTIMEDuration in minutes (positive integer)PRICE (HKD)Fare as a non-negative decimal
+```
+
+| Column | Description |
+|---|---|
+| `ID` | Row identifier (integer) |
+| `START` | Departing station name |
+| `STOP` | Arriving station name |
+| `TIME` | Duration in minutes (positive integer) |
+| `PRICE (HKD)` | Fare as a non-negative decimal |
+
 Example:
+```
 ID,START,STOP,TIME,PRICE (HKD)
 1,Central,Admiralty,4,4.00
 2,Admiralty,Wan Chai,3,4.00
+```
 
-Station names in START and STOP must exactly match names in stations.csv.
+> Station names in `START` and `STOP` must exactly match names in `stations.csv`.
 
+---
 
-Large File Storage (GitHub)
-If GitHub rejects your network files due to size limits, install Git LFS to store them:
-bashgit lfs install
+### Large File Storage (GitHub)
+
+If GitHub rejects your network files due to size limits, install **Git LFS** to store them:
+
+```bash
+git lfs install
 git lfs track "*.csv"
 git add .gitattributes
 git commit -m "Track CSVs with LFS"
+```
+
 Only set this up if you encounter a file size error when pushing to GitHub.
-### Rules for both formats
-
-- Lines beginning with `#` and blank lines are skipped.
-- Rows with fewer than 4 fields, non-numeric duration, or negative cost are skipped individually — the rest of the file still loads.
-- A missing file or empty file produces an empty network with a printed warning; the program does not crash.
-
----
 
 ---
 
