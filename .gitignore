@@ -4,3 +4,4 @@ SPEC.md
 .claude/settings.local.json
 .gitignore
 __pycache__/
+_tmp
